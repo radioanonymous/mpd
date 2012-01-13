@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,6 +26,9 @@ struct songvec;
 
 void
 song_print_info(struct client *client, struct song *song);
+
+void
+songvec_print(struct client *client, const struct songvec *sv);
 
 void
 song_print_uri(struct client *client, struct song *song);

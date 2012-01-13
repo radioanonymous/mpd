@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,24 +29,12 @@
 #include "input/curl_input_plugin.h"
 #endif
 
-#ifdef ENABLE_SOUP
-#include "input/soup_input_plugin.h"
-#endif
-
 #ifdef HAVE_FFMPEG
 #include "input/ffmpeg_input_plugin.h"
 #endif
 
 #ifdef ENABLE_MMS
 #include "input/mms_input_plugin.h"
-#endif
-
-#ifdef ENABLE_CDIO_PARANOIA
-#include "input/cdio_paranoia_input_plugin.h"
-#endif
-
-#ifdef ENABLE_DESPOTIFY
-#include "input/despotify_input_plugin.h"
 #endif
 
 #include <glib.h>
@@ -59,20 +47,11 @@ const struct input_plugin *const input_plugins[] = {
 #ifdef ENABLE_CURL
 	&input_plugin_curl,
 #endif
-#ifdef ENABLE_SOUP
-	&input_plugin_soup,
-#endif
 #ifdef HAVE_FFMPEG
 	&input_plugin_ffmpeg,
 #endif
 #ifdef ENABLE_MMS
 	&input_plugin_mms,
-#endif
-#ifdef ENABLE_CDIO_PARANOIA
-	&input_plugin_cdio_paranoia,
-#endif
-#ifdef ENABLE_DESPOTIFY
-	&input_plugin_despotify,
 #endif
 	NULL
 };

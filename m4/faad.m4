@@ -39,8 +39,8 @@ if test x$enable_aac = xyes; then
 	oldcflags=$CFLAGS
 	oldlibs=$LIBS
 	oldcppflags=$CPPFLAGS
-	CFLAGS="$CFLAGS $FAAD_CFLAGS -I."
-	LIBS="$LIBS $FAAD_LIBS"
+	CFLAGS="$CFLAGS $MPD_CFLAGS $FAAD_CFLAGS -I."
+	LIBS="$LIBS $MPD_LIBS $FAAD_LIBS"
 	CPPFLAGS=$CFLAGS
 	AC_CHECK_HEADER(faad.h,,enable_aac=no)
 	if test x$enable_aac = xyes; then
@@ -50,10 +50,10 @@ if test x$enable_aac = xyes; then
 		AC_CHECK_DECL(faacDecInit2,,enable_aac=no,[#include <faad.h>])
 	fi
 	if test x$enable_aac = xyes; then
-		AC_CHECK_LIB(faad,faacDecInit2,,enable_aac=no)
+		AC_CHECK_LIB(faad,faacDecInit2,[MPD_LIBS="$MPD_LIBS $FAAD_LIBS";MPD_CFLAGS="$MPD_CFLAGS $FAAD_CFLAGS"],enable_aac=no)
 		if test x$enable_aac = xno; then
 			enable_aac=yes
-			AC_CHECK_LIB(faad,NeAACDecInit2,,enable_aac=no)
+			AC_CHECK_LIB(faad,NeAACDecInit2,[MPD_LIBS="$MPD_LIBS $FAAD_LIBS";MPD_CFLAGS="$MPD_CFLAGS $FAAD_CFLAGS"],enable_aac=no)
 		fi
 	fi
 	if test x$enable_aac = xyes; then
@@ -131,8 +131,8 @@ if test x$enable_aac = xyes; then
 	oldcflags=$CFLAGS
 	oldlibs=$LIBS
 	oldcppflags=$CPPFLAGS
-	CFLAGS="$CFLAGS $FAAD_CFLAGS -Werror"
-	LIBS="$LIBS $FAAD_LIBS"
+	CFLAGS="$CFLAGS $MPD_CFLAGS $FAAD_CFLAGS -Werror"
+	LIBS="$LIBS $MPD_LIBS $FAAD_LIBS"
 	CPPFLAGS=$CFLAGS
 
 	AC_MSG_CHECKING(for broken libfaad headers)
@@ -188,11 +188,5 @@ if test x$enable_aac = xyes; then
 	CPPFLAGS=$oldcppflags
 else
 	enable_mp4=no
-	FAAD_CFLAGS=""
-	FAAD_LIBS=""
 fi
-
-AC_SUBST(FAAD_CFLAGS)
-AC_SUBST(FAAD_LIBS)
-
 ])

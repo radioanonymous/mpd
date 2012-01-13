@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,7 +29,6 @@
 #include "filter/convert_filter_plugin.h"
 #include "filter/replay_gain_filter_plugin.h"
 #include "mpd_error.h"
-#include "notify.h"
 
 #include <glib.h>
 
@@ -60,7 +59,7 @@ ao_enable(struct audio_output *ao)
 		return true;
 
 	g_mutex_unlock(ao->mutex);
-	success = ao_plugin_enable(ao, &error);
+	success = ao_plugin_enable(ao->plugin, ao->data, &error);
 	g_mutex_lock(ao->mutex);
 	if (!success) {
 		g_warning("Failed to enable \"%s\" [%s]: %s\n",
@@ -86,7 +85,7 @@ ao_disable(struct audio_output *ao)
 		ao->really_enabled = false;
 
 		g_mutex_unlock(ao->mutex);
-		ao_plugin_disable(ao);
+		ao_plugin_disable(ao->plugin, ao->data);
 		g_mutex_lock(ao->mutex);
 	}
 }
@@ -175,7 +174,9 @@ ao_open(struct audio_output *ao)
 				&ao->config_audio_format);
 
 	g_mutex_unlock(ao->mutex);
-	success = ao_plugin_open(ao, &ao->out_audio_format, &error);
+	success = ao_plugin_open(ao->plugin, ao->data,
+				 &ao->out_audio_format,
+				 &error);
 	g_mutex_lock(ao->mutex);
 
 	assert(!ao->open);
@@ -219,11 +220,11 @@ ao_close(struct audio_output *ao, bool drain)
 	g_mutex_unlock(ao->mutex);
 
 	if (drain)
-		ao_plugin_drain(ao);
+		ao_plugin_drain(ao->plugin, ao->data);
 	else
-		ao_plugin_cancel(ao);
+		ao_plugin_cancel(ao->plugin, ao->data);
 
-	ao_plugin_close(ao);
+	ao_plugin_close(ao->plugin, ao->data);
 	ao_filter_close(ao);
 
 	g_mutex_lock(ao->mutex);
@@ -255,7 +256,7 @@ ao_reopen_filter(struct audio_output *ao)
 		ao->fail_timer = g_timer_new();
 
 		g_mutex_unlock(ao->mutex);
-		ao_plugin_close(ao);
+		ao_plugin_close(ao->plugin, ao->data);
 		g_mutex_lock(ao->mutex);
 
 		return;
@@ -300,7 +301,7 @@ static bool
 ao_wait(struct audio_output *ao)
 {
 	while (true) {
-		unsigned delay = ao_plugin_delay(ao);
+		unsigned delay = ao_plugin_delay(ao->plugin, ao->data);
 		if (delay == 0)
 			return true;
 
@@ -401,12 +402,8 @@ ao_filter_chunk(struct audio_output *ao, const struct music_chunk *chunk,
 		char *dest = pcm_buffer_get(&ao->cross_fade_buffer,
 					    other_length);
 		memcpy(dest, other_data, other_length);
-		if (!pcm_mix(dest, data, length, ao->in_audio_format.format,
-			     1.0 - chunk->mix_ratio)) {
-			g_warning("Cannot cross-fade format %s",
-				  sample_format_to_string(ao->in_audio_format.format));
-			return NULL;
-		}
+		pcm_mix(dest, data, length, &ao->in_audio_format,
+			1.0 - chunk->mix_ratio);
 
 		data = dest;
 		length = other_length;
@@ -436,7 +433,7 @@ ao_play_chunk(struct audio_output *ao, const struct music_chunk *chunk)
 
 	if (chunk->tag != NULL) {
 		g_mutex_unlock(ao->mutex);
-		ao_plugin_send_tag(ao, chunk->tag);
+		ao_plugin_send_tag(ao->plugin, ao->data, chunk->tag);
 		g_mutex_lock(ao->mutex);
 	}
 
@@ -458,7 +455,8 @@ ao_play_chunk(struct audio_output *ao, const struct music_chunk *chunk)
 			break;
 
 		g_mutex_unlock(ao->mutex);
-		nbytes = ao_plugin_play(ao, data, size, &error);
+		nbytes = ao_plugin_play(ao->plugin, ao->data, data, size,
+					&error);
 		g_mutex_lock(ao->mutex);
 		if (nbytes == 0) {
 			/* play()==0 means failure */
@@ -537,7 +535,7 @@ ao_play(struct audio_output *ao)
 	ao->chunk_finished = true;
 
 	g_mutex_unlock(ao->mutex);
-	player_lock_signal(ao->player_control);
+	player_lock_signal();
 	g_mutex_lock(ao->mutex);
 
 	return true;
@@ -548,7 +546,7 @@ static void ao_pause(struct audio_output *ao)
 	bool ret;
 
 	g_mutex_unlock(ao->mutex);
-	ao_plugin_cancel(ao);
+	ao_plugin_cancel(ao->plugin, ao->data);
 	g_mutex_lock(ao->mutex);
 
 	ao->pause = true;
@@ -559,7 +557,7 @@ static void ao_pause(struct audio_output *ao)
 			break;
 
 		g_mutex_unlock(ao->mutex);
-		ret = ao_plugin_pause(ao);
+		ret = ao_plugin_pause(ao->plugin, ao->data);
 		g_mutex_lock(ao->mutex);
 
 		if (!ret) {
@@ -633,7 +631,7 @@ static gpointer audio_output_task(gpointer arg)
 				assert(music_pipe_peek(ao->pipe) == NULL);
 
 				g_mutex_unlock(ao->mutex);
-				ao_plugin_drain(ao);
+				ao_plugin_drain(ao->plugin, ao->data);
 				g_mutex_lock(ao->mutex);
 			}
 
@@ -645,7 +643,7 @@ static gpointer audio_output_task(gpointer arg)
 
 			if (ao->open) {
 				g_mutex_unlock(ao->mutex);
-				ao_plugin_cancel(ao);
+				ao_plugin_cancel(ao->plugin, ao->data);
 				g_mutex_lock(ao->mutex);
 			}
 

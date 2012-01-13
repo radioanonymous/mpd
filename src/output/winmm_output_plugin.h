@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,18 +20,10 @@
 #ifndef MPD_WINMM_OUTPUT_PLUGIN_H
 #define MPD_WINMM_OUTPUT_PLUGIN_H
 
-#include "check.h"
-
-#ifdef ENABLE_WINMM_OUTPUT
-
 #include <windows.h>
 
 struct winmm_output;
 
-extern const struct audio_output_plugin winmm_output_plugin;
-
 HWAVEOUT winmm_output_get_handle(struct winmm_output*);
-
-#endif
 
 #endif

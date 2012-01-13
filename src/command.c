@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,12 +24,12 @@
 #include "playlist_print.h"
 #include "playlist_save.h"
 #include "playlist_queue.h"
-#include "playlist_error.h"
 #include "queue_print.h"
 #include "ls.h"
 #include "uri.h"
 #include "decoder_print.h"
 #include "directory.h"
+#include "directory_print.h"
 #include "database.h"
 #include "update.h"
 #include "volume.h"
@@ -42,14 +42,8 @@
 #include "output_print.h"
 #include "locate.h"
 #include "dbUtils.h"
-#include "db_error.h"
-#include "db_print.h"
-#include "db_selection.h"
 #include "tag.h"
 #include "client.h"
-#include "client_idle.h"
-#include "client_internal.h"
-#include "client_subscribe.h"
 #include "tag_print.h"
 #include "path.h"
 #include "replay_gain_config.h"
@@ -378,46 +372,6 @@ print_playlist_result(struct client *client,
 	return COMMAND_RETURN_ERROR;
 }
 
-/**
- * Send the GError to the client and free the GError.
- */
-static enum command_return
-print_error(struct client *client, GError *error)
-{
-	assert(client != NULL);
-	assert(error != NULL);
-
-	g_warning("%s", error->message);
-
-	if (error->domain == playlist_quark()) {
-		enum playlist_result result = error->code;
-		g_error_free(error);
-		return print_playlist_result(client, result);
-	} else if (error->domain == db_quark()) {
-		switch ((enum db_error)error->code) {
-		case DB_DISABLED:
-			command_error(client, ACK_ERROR_NO_EXIST, "%s",
-				      error->message);
-			g_error_free(error);
-			return COMMAND_RETURN_ERROR;
-
-		case DB_NOT_FOUND:
-			g_error_free(error);
-			command_error(client, ACK_ERROR_NO_EXIST, "Not found");
-			return COMMAND_RETURN_ERROR;
-		}
-	} else if (error->domain == g_file_error_quark()) {
-		command_error(client, ACK_ERROR_SYSTEM, "%s",
-			      g_strerror(error->code));
-		g_error_free(error);
-		return COMMAND_RETURN_ERROR;
-	}
-
-	g_error_free(error);
-	command_error(client, ACK_ERROR_UNKNOWN, "error");
-	return COMMAND_RETURN_ERROR;
-}
-
 static void
 print_spl_list(struct client *client, GPtrArray *list)
 {
@@ -480,7 +434,7 @@ handle_play(struct client *client, int argc, char *argv[])
 
 	if (argc == 2 && !check_int(client, &song, argv[1], need_positive))
 		return COMMAND_RETURN_ERROR;
-	result = playlist_play(&g_playlist, client->player_control, song);
+	result = playlist_play(&g_playlist, song);
 	return print_playlist_result(client, result);
 }
 
@@ -493,7 +447,7 @@ handle_playid(struct client *client, int argc, char *argv[])
 	if (argc == 2 && !check_int(client, &id, argv[1], need_positive))
 		return COMMAND_RETURN_ERROR;
 
-	result = playlist_play_id(&g_playlist, client->player_control, id);
+	result = playlist_play_id(&g_playlist, id);
 	return print_playlist_result(client, result);
 }
 
@@ -501,7 +455,7 @@ static enum command_return
 handle_stop(G_GNUC_UNUSED struct client *client,
 	    G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
 {
-	playlist_stop(&g_playlist, client->player_control);
+	playlist_stop(&g_playlist);
 	return COMMAND_RETURN_OK;
 }
 
@@ -522,9 +476,9 @@ handle_pause(struct client *client,
 		if (!check_bool(client, &pause_flag, argv[1]))
 			return COMMAND_RETURN_ERROR;
 
-		pc_set_pause(client->player_control, pause_flag);
+		pc_set_pause(pause_flag);
 	} else
-		pc_pause(client->player_control);
+		pc_pause();
 
 	return COMMAND_RETURN_OK;
 }
@@ -539,7 +493,7 @@ handle_status(struct client *client,
 	char *error;
 	int song;
 
-	pc_get_status(client->player_control, &player_status);
+	pc_get_status(&player_status);
 
 	switch (player_status.state) {
 	case PLAYER_STATE_STOP:
@@ -572,9 +526,9 @@ handle_status(struct client *client,
 		      playlist_get_consume(&g_playlist),
 		      playlist_get_version(&g_playlist),
 		      playlist_get_length(&g_playlist),
-		      (int)(pc_get_cross_fade(client->player_control) + 0.5),
-		      pc_get_mixramp_db(client->player_control),
-		      pc_get_mixramp_delay(client->player_control),
+		      (int)(pc_get_cross_fade() + 0.5),
+		      pc_get_mixramp_db(),
+		      pc_get_mixramp_delay(),
 		      state);
 
 	song = playlist_get_current_song(&g_playlist);
@@ -607,7 +561,7 @@ handle_status(struct client *client,
 			      updateJobId);
 	}
 
-	error = pc_get_error_message(client->player_control);
+	error = pc_get_error_message();
 	if (error != NULL) {
 		client_printf(client,
 			      COMMAND_STATUS_ERROR ": %s\n",
@@ -651,7 +605,6 @@ handle_add(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		result = PLAYLIST_RESULT_DENIED;
 #else
 		result = playlist_append_file(&g_playlist,
-					      client->player_control,
 					      uri + 7, client_get_uid(client),
 					      NULL);
 #endif
@@ -665,16 +618,18 @@ handle_add(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 			return COMMAND_RETURN_ERROR;
 		}
 
-		result = playlist_append_uri(&g_playlist,
-					     client->player_control,
-					     uri, NULL);
+		result = playlist_append_uri(&g_playlist, uri, NULL);
 		return print_playlist_result(client, result);
 	}
 
-	GError *error = NULL;
-	return addAllIn(client->player_control, uri, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	result = addAllIn(uri);
+	if (result == (enum playlist_result)-1) {
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory or file not found");
+		return COMMAND_RETURN_ERROR;
+	}
+
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
@@ -688,9 +643,7 @@ handle_addid(struct client *client, int argc, char *argv[])
 #ifdef WIN32
 		result = PLAYLIST_RESULT_DENIED;
 #else
-		result = playlist_append_file(&g_playlist,
-					      client->player_control,
-					      uri + 7,
+		result = playlist_append_file(&g_playlist, uri + 7,
 					      client_get_uid(client),
 					      &added_id);
 #endif
@@ -701,9 +654,7 @@ handle_addid(struct client *client, int argc, char *argv[])
 			return COMMAND_RETURN_ERROR;
 		}
 
-		result = playlist_append_uri(&g_playlist,
-					     client->player_control,
-					     uri, &added_id);
+		result = playlist_append_uri(&g_playlist, uri, &added_id);
 	}
 
 	if (result != PLAYLIST_RESULT_SUCCESS)
@@ -713,13 +664,11 @@ handle_addid(struct client *client, int argc, char *argv[])
 		int to;
 		if (!check_int(client, &to, argv[2], check_integer, argv[2]))
 			return COMMAND_RETURN_ERROR;
-		result = playlist_move_id(&g_playlist, client->player_control,
-					  added_id, to);
+		result = playlist_move_id(&g_playlist, added_id, to);
 		if (result != PLAYLIST_RESULT_SUCCESS) {
 			enum command_return ret =
 				print_playlist_result(client, result);
-			playlist_delete_id(&g_playlist, client->player_control,
-					   added_id);
+			playlist_delete_id(&g_playlist, added_id);
 			return ret;
 		}
 	}
@@ -737,8 +686,7 @@ handle_delete(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 	if (!check_range(client, &start, &end, argv[1], need_range))
 		return COMMAND_RETURN_ERROR;
 
-	result = playlist_delete_range(&g_playlist, client->player_control,
-				       start, end);
+	result = playlist_delete_range(&g_playlist, start, end);
 	return print_playlist_result(client, result);
 }
 
@@ -751,7 +699,7 @@ handle_deleteid(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 	if (!check_int(client, &id, argv[1], need_positive))
 		return COMMAND_RETURN_ERROR;
 
-	result = playlist_delete_id(&g_playlist, client->player_control, id);
+	result = playlist_delete_id(&g_playlist, id);
 	return print_playlist_result(client, result);
 }
 
@@ -772,7 +720,7 @@ handle_shuffle(G_GNUC_UNUSED struct client *client,
 	                              argv[1], need_range))
 		return COMMAND_RETURN_ERROR;
 
-	playlist_shuffle(&g_playlist, client->player_control, start, end);
+	playlist_shuffle(&g_playlist, start, end);
 	return COMMAND_RETURN_OK;
 }
 
@@ -780,7 +728,7 @@ static enum command_return
 handle_clear(G_GNUC_UNUSED struct client *client,
 	     G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
 {
-	playlist_clear(&g_playlist, client->player_control);
+	playlist_clear(&g_playlist);
 	return COMMAND_RETURN_OK;
 }
 
@@ -799,16 +747,12 @@ handle_load(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
 	enum playlist_result result;
 
-	result = playlist_open_into_queue(argv[1], &g_playlist,
-					  client->player_control, true);
+	result = playlist_open_into_queue(argv[1], &g_playlist);
 	if (result != PLAYLIST_RESULT_NO_SUCH_LIST)
 		return print_playlist_result(client, result);
 
-	GError *error = NULL;
-	return playlist_load_spl(&g_playlist, client->player_control,
-				 argv[1], &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	result = playlist_load_spl(&g_playlist, argv[1]);
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
@@ -817,10 +761,15 @@ handle_listplaylist(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 	if (playlist_file_print(client, argv[1], false))
 		return COMMAND_RETURN_OK;
 
-	GError *error = NULL;
-	return spl_print(client, argv[1], false, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	bool ret;
+
+	ret = spl_print(client, argv[1], false);
+	if (!ret) {
+		command_error(client, ACK_ERROR_NO_EXIST, "No such playlist");
+		return COMMAND_RETURN_ERROR;
+	}
+
+	return COMMAND_RETURN_OK;
 }
 
 static enum command_return
@@ -830,16 +779,22 @@ handle_listplaylistinfo(struct client *client,
 	if (playlist_file_print(client, argv[1], true))
 		return COMMAND_RETURN_OK;
 
-	GError *error = NULL;
-	return spl_print(client, argv[1], true, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	bool ret;
+
+	ret = spl_print(client, argv[1], true);
+	if (!ret) {
+		command_error(client, ACK_ERROR_NO_EXIST, "No such playlist");
+		return COMMAND_RETURN_ERROR;
+	}
+
+	return COMMAND_RETURN_OK;
 }
 
 static enum command_return
 handle_lsinfo(struct client *client, int argc, char *argv[])
 {
 	const char *uri;
+	const struct directory *directory;
 
 	if (argc == 2)
 		uri = argv[1];
@@ -847,15 +802,17 @@ handle_lsinfo(struct client *client, int argc, char *argv[])
 		/* default is root directory */
 		uri = "";
 
-	struct db_selection selection;
-	db_selection_init(&selection, uri, false);
+	directory = db_get_directory(uri);
+	if (directory == NULL) {
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory not found");
+		return COMMAND_RETURN_ERROR;
+	}
 
-	GError *error = NULL;
-	if (!db_selection_print(client, &selection, true, &error))
-		return print_error(client, error);
+	directory_print(client, directory);
 
 	if (isRootDirectory(uri)) {
-		GPtrArray *list = spl_list(NULL);
+		GPtrArray *list = spl_list();
 		if (list != NULL) {
 			print_spl_list(client, list);
 			spl_list_free(list);
@@ -868,19 +825,19 @@ handle_lsinfo(struct client *client, int argc, char *argv[])
 static enum command_return
 handle_rm(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
-	GError *error = NULL;
-	return spl_delete(argv[1], &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	enum playlist_result result;
+
+	result = spl_delete(argv[1]);
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
 handle_rename(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
-	GError *error = NULL;
-	return spl_rename(argv[1], argv[2], &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	enum playlist_result result;
+
+	result = spl_rename(argv[1], argv[2]);
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
@@ -948,6 +905,7 @@ handle_playlistid(struct client *client, int argc, char *argv[])
 static enum command_return
 handle_find(struct client *client, int argc, char *argv[])
 {
+	int ret;
 	struct locate_item_list *list =
 		locate_item_list_parse(argv + 1, argc - 1);
 
@@ -959,10 +917,10 @@ handle_find(struct client *client, int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	}
 
-	GError *error = NULL;
-	enum command_return ret = findSongsIn(client, "", list, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	ret = findSongsIn(client, NULL, list);
+	if (ret == -1)
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory or file not found");
 
 	locate_item_list_free(list);
 
@@ -972,6 +930,7 @@ handle_find(struct client *client, int argc, char *argv[])
 static enum command_return
 handle_findadd(struct client *client, int argc, char *argv[])
 {
+    int ret;
     struct locate_item_list *list =
 	    locate_item_list_parse(argv + 1, argc - 1);
     if (list == NULL || list->length == 0) {
@@ -982,11 +941,10 @@ handle_findadd(struct client *client, int argc, char *argv[])
 	    return COMMAND_RETURN_ERROR;
     }
 
-    GError *error = NULL;
-    enum command_return ret =
-	    findAddIn(client->player_control, "", list, &error)
-	    ? COMMAND_RETURN_OK
-	    : print_error(client, error);
+    ret = findAddIn(client, NULL, list);
+    if (ret == -1)
+	    command_error(client, ACK_ERROR_NO_EXIST,
+			  "directory or file not found");
 
     locate_item_list_free(list);
 
@@ -996,6 +954,7 @@ handle_findadd(struct client *client, int argc, char *argv[])
 static enum command_return
 handle_search(struct client *client, int argc, char *argv[])
 {
+	int ret;
 	struct locate_item_list *list =
 		locate_item_list_parse(argv + 1, argc - 1);
 
@@ -1007,10 +966,10 @@ handle_search(struct client *client, int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	}
 
-	GError *error = NULL;
-	enum command_return ret = searchForSongsIn(client, "", list, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	ret = searchForSongsIn(client, NULL, list);
+	if (ret == -1)
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory or file not found");
 
 	locate_item_list_free(list);
 
@@ -1020,6 +979,7 @@ handle_search(struct client *client, int argc, char *argv[])
 static enum command_return
 handle_count(struct client *client, int argc, char *argv[])
 {
+	int ret;
 	struct locate_item_list *list =
 		locate_item_list_parse(argv + 1, argc - 1);
 
@@ -1031,11 +991,10 @@ handle_count(struct client *client, int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	}
 
-	GError *error = NULL;
-	enum command_return ret =
-		searchStatsForSongsIn(client, "", list, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	ret = searchStatsForSongsIn(client, NULL, list);
+	if (ret == -1)
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory or file not found");
 
 	locate_item_list_free(list);
 
@@ -1089,14 +1048,13 @@ handle_playlistdelete(struct client *client,
 		      G_GNUC_UNUSED int argc, char *argv[]) {
 	char *playlist = argv[1];
 	int from;
+	enum playlist_result result;
 
 	if (!check_int(client, &from, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
 
-	GError *error = NULL;
-	return spl_remove_index(playlist, from, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	result = spl_remove_index(playlist, from);
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
@@ -1104,16 +1062,15 @@ handle_playlistmove(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
 	char *playlist = argv[1];
 	int from, to;
+	enum playlist_result result;
 
 	if (!check_int(client, &from, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
 	if (!check_int(client, &to, argv[3], check_integer, argv[3]))
 		return COMMAND_RETURN_ERROR;
 
-	GError *error = NULL;
-	return spl_move_index(playlist, from, to, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	result = spl_move_index(playlist, from, to);
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
@@ -1184,7 +1141,7 @@ handle_next(G_GNUC_UNUSED struct client *client,
 	int single = g_playlist.queue.single;
 	g_playlist.queue.single = false;
 
-	playlist_next(&g_playlist, client->player_control);
+	playlist_next(&g_playlist);
 
 	g_playlist.queue.single = single;
 	return COMMAND_RETURN_OK;
@@ -1194,84 +1151,25 @@ static enum command_return
 handle_previous(G_GNUC_UNUSED struct client *client,
 		G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
 {
-	playlist_previous(&g_playlist, client->player_control);
-	return COMMAND_RETURN_OK;
-}
-
-static enum command_return
-handle_prio(struct client *client, int argc, char *argv[])
-{
-	unsigned priority;
-
-	if (!check_unsigned(client, &priority, argv[1]))
-		return COMMAND_RETURN_ERROR;
-
-	if (priority > 0xff) {
-		command_error(client, ACK_ERROR_ARG,
-			      "Priority out of range: %s", argv[1]);
-		return COMMAND_RETURN_ERROR;
-	}
-
-	for (int i = 2; i < argc; ++i) {
-		unsigned start_position, end_position;
-		if (!check_range(client, &start_position, &end_position,
-				 argv[i], need_range))
-			return COMMAND_RETURN_ERROR;
-
-		enum playlist_result result =
-			playlist_set_priority(&g_playlist,
-					      client->player_control,
-					      start_position, end_position,
-					      priority);
-		if (result != PLAYLIST_RESULT_SUCCESS)
-			return print_playlist_result(client, result);
-	}
-
-	return COMMAND_RETURN_OK;
-}
-
-static enum command_return
-handle_prioid(struct client *client, int argc, char *argv[])
-{
-	unsigned priority;
-
-	if (!check_unsigned(client, &priority, argv[1]))
-		return COMMAND_RETURN_ERROR;
-
-	if (priority > 0xff) {
-		command_error(client, ACK_ERROR_ARG,
-			      "Priority out of range: %s", argv[1]);
-		return COMMAND_RETURN_ERROR;
-	}
-
-	for (int i = 2; i < argc; ++i) {
-		unsigned song_id;
-		if (!check_unsigned(client, &song_id, argv[i]))
-			return COMMAND_RETURN_ERROR;
-
-		enum playlist_result result =
-			playlist_set_priority_id(&g_playlist,
-						 client->player_control,
-						 song_id, priority);
-		if (result != PLAYLIST_RESULT_SUCCESS)
-			return print_playlist_result(client, result);
-	}
-
+	playlist_previous(&g_playlist);
 	return COMMAND_RETURN_OK;
 }
 
 static enum command_return
 handle_listall(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
-	const char *directory = "";
+	char *directory = NULL;
+	int ret;
 
 	if (argc == 2)
 		directory = argv[1];
 
-	GError *error = NULL;
-	return printAllIn(client, directory, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	ret = printAllIn(client, directory);
+	if (ret == -1)
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory or file not found");
+
+	return ret;
 }
 
 static enum command_return
@@ -1312,7 +1210,7 @@ handle_repeat(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	}
 
-	playlist_set_repeat(&g_playlist, client->player_control, status);
+	playlist_set_repeat(&g_playlist, status);
 	return COMMAND_RETURN_OK;
 }
 
@@ -1330,7 +1228,7 @@ handle_single(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	}
 
-	playlist_set_single(&g_playlist, client->player_control, status);
+	playlist_set_single(&g_playlist, status);
 	return COMMAND_RETURN_OK;
 }
 
@@ -1366,7 +1264,7 @@ handle_random(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	}
 
-	playlist_set_random(&g_playlist, client->player_control, status);
+	playlist_set_random(&g_playlist, status);
 	return COMMAND_RETURN_OK;
 }
 
@@ -1381,7 +1279,7 @@ static enum command_return
 handle_clearerror(G_GNUC_UNUSED struct client *client,
 		  G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
 {
-	pc_clear_error(client->player_control);
+	pc_clear_error();
 	return COMMAND_RETURN_OK;
 }
 
@@ -1390,6 +1288,7 @@ handle_list(struct client *client, int argc, char *argv[])
 {
 	struct locate_item_list *conditionals;
 	int tagType = locate_parse_type(argv[1]);
+	int ret;
 
 	if (tagType < 0) {
 		command_error(client, ACK_ERROR_ARG, "\"%s\" is not known", argv[1]);
@@ -1426,13 +1325,13 @@ handle_list(struct client *client, int argc, char *argv[])
 		}
 	}
 
-	GError *error = NULL;
-	enum command_return ret =
-		listAllUniqueTags(client, tagType, conditionals, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	ret = listAllUniqueTags(client, tagType, conditionals);
 
 	locate_item_list_free(conditionals);
+
+	if (ret == -1)
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory or file not found");
 
 	return ret;
 }
@@ -1449,8 +1348,7 @@ handle_move(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	if (!check_int(client, &to, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
-	result = playlist_move_range(&g_playlist, client->player_control,
-				     start, end, to);
+	result = playlist_move_range(&g_playlist, start, end, to);
 	return print_playlist_result(client, result);
 }
 
@@ -1464,8 +1362,7 @@ handle_moveid(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	if (!check_int(client, &to, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
-	result = playlist_move_id(&g_playlist, client->player_control,
-				  id, to);
+	result = playlist_move_id(&g_playlist, id, to);
 	return print_playlist_result(client, result);
 }
 
@@ -1479,8 +1376,7 @@ handle_swap(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	if (!check_int(client, &song2, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
-	result = playlist_swap_songs(&g_playlist, client->player_control,
-				     song1, song2);
+	result = playlist_swap_songs(&g_playlist, song1, song2);
 	return print_playlist_result(client, result);
 }
 
@@ -1494,8 +1390,7 @@ handle_swapid(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 		return COMMAND_RETURN_ERROR;
 	if (!check_int(client, &id2, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
-	result = playlist_swap_songs_id(&g_playlist, client->player_control,
-					id1, id2);
+	result = playlist_swap_songs_id(&g_playlist, id1, id2);
 	return print_playlist_result(client, result);
 }
 
@@ -1510,8 +1405,7 @@ handle_seek(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 	if (!check_int(client, &seek_time, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
 
-	result = playlist_seek_song(&g_playlist, client->player_control,
-				    song, seek_time);
+	result = playlist_seek_song(&g_playlist, song, seek_time);
 	return print_playlist_result(client, result);
 }
 
@@ -1526,38 +1420,25 @@ handle_seekid(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 	if (!check_int(client, &seek_time, argv[2], check_integer, argv[2]))
 		return COMMAND_RETURN_ERROR;
 
-	result = playlist_seek_song_id(&g_playlist, client->player_control,
-				       id, seek_time);
-	return print_playlist_result(client, result);
-}
-
-static enum command_return
-handle_seekcur(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
-{
-	const char *p = argv[1];
-	bool relative = *p == '+' || *p == '-';
-	int seek_time;
-	if (!check_int(client, &seek_time, p, check_integer, p))
-		return COMMAND_RETURN_ERROR;
-
-	enum playlist_result result =
-		playlist_seek_current(&g_playlist, client->player_control,
-				      seek_time, relative);
+	result = playlist_seek_song_id(&g_playlist, id, seek_time);
 	return print_playlist_result(client, result);
 }
 
 static enum command_return
 handle_listallinfo(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
-	const char *directory = "";
+	char *directory = NULL;
+	int ret;
 
 	if (argc == 2)
 		directory = argv[1];
 
-	GError *error = NULL;
-	return printInfoForAllIn(client, directory, &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	ret = printInfoForAllIn(client, directory);
+	if (ret == -1)
+		command_error(client, ACK_ERROR_NO_EXIST,
+			      "directory or file not found");
+
+	return ret;
 }
 
 static enum command_return
@@ -1589,7 +1470,7 @@ handle_crossfade(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 
 	if (!check_unsigned(client, &xfade_time, argv[1]))
 		return COMMAND_RETURN_ERROR;
-	pc_set_cross_fade(client->player_control, xfade_time);
+	pc_set_cross_fade(xfade_time);
 
 	return COMMAND_RETURN_OK;
 }
@@ -1601,7 +1482,7 @@ handle_mixrampdb(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 
 	if (!check_float(client, &db, argv[1]))
 		return COMMAND_RETURN_ERROR;
-	pc_set_mixramp_db(client->player_control, db);
+	pc_set_mixramp_db(db);
 
 	return COMMAND_RETURN_OK;
 }
@@ -1613,7 +1494,7 @@ handle_mixrampdelay(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 
 	if (!check_float(client, &delay_secs, argv[1]))
 		return COMMAND_RETURN_ERROR;
-	pc_set_mixramp_delay(client->player_control, delay_secs);
+	pc_set_mixramp_delay(delay_secs);
 
 	return COMMAND_RETURN_OK;
 }
@@ -1677,10 +1558,10 @@ handle_not_commands(struct client *client,
 static enum command_return
 handle_playlistclear(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
-	GError *error = NULL;
-	return spl_clear(argv[1], &error)
-		? COMMAND_RETURN_OK
-		: print_error(client, error);
+	enum playlist_result result;
+
+	result = spl_clear(argv[1]);
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
@@ -1688,9 +1569,8 @@ handle_playlistadd(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 {
 	char *playlist = argv[1];
 	char *uri = argv[2];
+	enum playlist_result result;
 
-	bool success;
-	GError *error = NULL;
 	if (uri_has_scheme(uri)) {
 		if (!uri_supported_scheme(uri)) {
 			command_error(client, ACK_ERROR_NO_EXIST,
@@ -1698,27 +1578,29 @@ handle_playlistadd(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
 			return COMMAND_RETURN_ERROR;
 		}
 
-		success = spl_append_uri(argv[1], playlist, &error);
+		result = spl_append_uri(uri, playlist);
 	} else
-		success = addAllInToStoredPlaylist(uri, playlist, &error);
+		result = addAllInToStoredPlaylist(uri, playlist);
 
-	if (!success && error == NULL) {
+	if (result == (enum playlist_result)-1) {
 		command_error(client, ACK_ERROR_NO_EXIST,
 			      "directory or file not found");
 		return COMMAND_RETURN_ERROR;
 	}
 
-	return success ? COMMAND_RETURN_OK : print_error(client, error);
+	return print_playlist_result(client, result);
 }
 
 static enum command_return
 handle_listplaylists(struct client *client,
 		     G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
 {
-	GError *error = NULL;
-	GPtrArray *list = spl_list(&error);
-	if (list == NULL)
-		return print_error(client, error);
+	GPtrArray *list = spl_list();
+	if (list == NULL) {
+		command_error(client, ACK_ERROR_SYSTEM,
+			      "failed to get list of stored playlists");
+		return COMMAND_RETURN_ERROR;
+	}
 
 	print_spl_list(client, list);
 	spl_list_free(list);
@@ -1935,172 +1817,6 @@ handle_sticker(struct client *client, int argc, char *argv[])
 }
 #endif
 
-static enum command_return
-handle_subscribe(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
-{
-	assert(argc == 2);
-
-	switch (client_subscribe(client, argv[1])) {
-	case CLIENT_SUBSCRIBE_OK:
-		return COMMAND_RETURN_OK;
-
-	case CLIENT_SUBSCRIBE_INVALID:
-		command_error(client, ACK_ERROR_ARG,
-			      "invalid channel name");
-		return COMMAND_RETURN_ERROR;
-
-	case CLIENT_SUBSCRIBE_ALREADY:
-		command_error(client, ACK_ERROR_EXIST,
-			      "already subscribed to this channel");
-		return COMMAND_RETURN_ERROR;
-
-	case CLIENT_SUBSCRIBE_FULL:
-		command_error(client, ACK_ERROR_EXIST,
-			      "subscription list is full");
-		return COMMAND_RETURN_ERROR;
-	}
-
-	/* unreachable */
-	return COMMAND_RETURN_OK;
-}
-
-static enum command_return
-handle_unsubscribe(struct client *client, G_GNUC_UNUSED int argc, char *argv[])
-{
-	assert(argc == 2);
-
-	if (client_unsubscribe(client, argv[1]))
-		return COMMAND_RETURN_OK;
-	else {
-		command_error(client, ACK_ERROR_NO_EXIST,
-			      "not subscribed to this channel");
-		return COMMAND_RETURN_ERROR;
-	}
-}
-
-struct channels_context {
-	GStringChunk *chunk;
-
-	GHashTable *channels;
-};
-
-static void
-collect_channels(gpointer data, gpointer user_data)
-{
-	struct channels_context *context = user_data;
-	const struct client *client = data;
-
-	for (GSList *i = client->subscriptions; i != NULL;
-	     i = g_slist_next(i)) {
-		const char *channel = i->data;
-
-		if (g_hash_table_lookup(context->channels, channel) == NULL) {
-			char *channel2 = g_string_chunk_insert(context->chunk,
-							       channel);
-			g_hash_table_insert(context->channels, channel2,
-					    context);
-		}
-	}
-}
-
-static void
-print_channel(gpointer key, G_GNUC_UNUSED gpointer value, gpointer user_data)
-{
-	struct client *client = user_data;
-	const char *channel = key;
-
-	client_printf(client, "channel: %s\n", channel);
-}
-
-static enum command_return
-handle_channels(struct client *client,
-		G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
-{
-	assert(argc == 1);
-
-	struct channels_context context = {
-		.chunk = g_string_chunk_new(1024),
-		.channels = g_hash_table_new(g_str_hash, g_str_equal),
-	};
-
-	client_list_foreach(collect_channels, &context);
-
-	g_hash_table_foreach(context.channels, print_channel, client);
-
-	g_hash_table_destroy(context.channels);
-	g_string_chunk_free(context.chunk);
-
-	return COMMAND_RETURN_OK;
-}
-
-static enum command_return
-handle_read_messages(struct client *client,
-		     G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
-{
-	assert(argc == 1);
-
-	GSList *messages = client_read_messages(client);
-
-	for (GSList *i = messages; i != NULL; i = g_slist_next(i)) {
-		struct client_message *msg = i->data;
-
-		client_printf(client, "channel: %s\nmessage: %s\n",
-			      msg->channel, msg->message);
-		client_message_free(msg);
-	}
-
-	g_slist_free(messages);
-
-	return COMMAND_RETURN_OK;
-}
-
-struct send_message_context {
-	struct client_message msg;
-
-	bool sent;
-};
-
-static void
-send_message(gpointer data, gpointer user_data)
-{
-	struct send_message_context *context = user_data;
-	struct client *client = data;
-
-	if (client_push_message(client, &context->msg))
-		context->sent = true;
-}
-
-static enum command_return
-handle_send_message(struct client *client,
-		    G_GNUC_UNUSED int argc, G_GNUC_UNUSED char *argv[])
-{
-	assert(argc == 3);
-
-	if (!client_message_valid_channel_name(argv[1])) {
-		command_error(client, ACK_ERROR_ARG,
-			      "invalid channel name");
-		return COMMAND_RETURN_ERROR;
-	}
-
-	struct send_message_context context = {
-		.sent = false,
-	};
-
-	client_message_init(&context.msg, argv[1], argv[2]);
-
-	client_list_foreach(send_message, &context);
-
-	client_message_deinit(&context.msg);
-
-	if (context.sent)
-		return COMMAND_RETURN_OK;
-	else {
-		command_error(client, ACK_ERROR_NO_EXIST,
-			      "nobody is subscribed to this channel");
-		return COMMAND_RETURN_ERROR;
-	}
-}
-
 /**
  * The command registry.
  *
@@ -2109,7 +1825,6 @@ handle_send_message(struct client *client,
 static const struct command commands[] = {
 	{ "add", PERMISSION_ADD, 1, 1, handle_add },
 	{ "addid", PERMISSION_ADD, 1, 2, handle_addid },
-	{ "channels", PERMISSION_READ, 0, 0, handle_channels },
 	{ "clear", PERMISSION_CONTROL, 0, 0, handle_clear },
 	{ "clearerror", PERMISSION_CONTROL, 0, 0, handle_clearerror },
 	{ "close", PERMISSION_NONE, -1, -1, handle_close },
@@ -2159,24 +1874,19 @@ static const struct command commands[] = {
 	{ "plchanges", PERMISSION_READ, 1, 1, handle_plchanges },
 	{ "plchangesposid", PERMISSION_READ, 1, 1, handle_plchangesposid },
 	{ "previous", PERMISSION_CONTROL, 0, 0, handle_previous },
-	{ "prio", PERMISSION_CONTROL, 2, -1, handle_prio },
-	{ "prioid", PERMISSION_CONTROL, 2, -1, handle_prioid },
 	{ "random", PERMISSION_CONTROL, 1, 1, handle_random },
-	{ "readmessages", PERMISSION_READ, 0, 0, handle_read_messages },
 	{ "rename", PERMISSION_CONTROL, 2, 2, handle_rename },
 	{ "repeat", PERMISSION_CONTROL, 1, 1, handle_repeat },
 	{ "replay_gain_mode", PERMISSION_CONTROL, 1, 1,
 	  handle_replay_gain_mode },
 	{ "replay_gain_status", PERMISSION_READ, 0, 0,
 	  handle_replay_gain_status },
-	{ "rescan", PERMISSION_CONTROL, 0, 1, handle_rescan },
+	{ "rescan", PERMISSION_ADMIN, 0, 1, handle_rescan },
 	{ "rm", PERMISSION_CONTROL, 1, 1, handle_rm },
 	{ "save", PERMISSION_CONTROL, 1, 1, handle_save },
 	{ "search", PERMISSION_READ, 2, -1, handle_search },
 	{ "seek", PERMISSION_CONTROL, 2, 2, handle_seek },
-	{ "seekcur", PERMISSION_CONTROL, 1, 1, handle_seekcur },
 	{ "seekid", PERMISSION_CONTROL, 2, 2, handle_seekid },
-	{ "sendmessage", PERMISSION_CONTROL, 2, 2, handle_send_message },
 	{ "setvol", PERMISSION_CONTROL, 1, 1, handle_setvol },
 	{ "shuffle", PERMISSION_CONTROL, 0, 1, handle_shuffle },
 	{ "single", PERMISSION_CONTROL, 1, 1, handle_single },
@@ -2186,12 +1896,10 @@ static const struct command commands[] = {
 	{ "sticker", PERMISSION_ADMIN, 3, -1, handle_sticker },
 #endif
 	{ "stop", PERMISSION_CONTROL, 0, 0, handle_stop },
-	{ "subscribe", PERMISSION_READ, 1, 1, handle_subscribe },
 	{ "swap", PERMISSION_CONTROL, 2, 2, handle_swap },
 	{ "swapid", PERMISSION_CONTROL, 2, 2, handle_swapid },
 	{ "tagtypes", PERMISSION_READ, 0, 0, handle_tagtypes },
-	{ "unsubscribe", PERMISSION_READ, 1, 1, handle_unsubscribe },
-	{ "update", PERMISSION_CONTROL, 0, 1, handle_update },
+	{ "update", PERMISSION_ADMIN, 0, 1, handle_update },
 	{ "urlhandlers", PERMISSION_READ, 0, 0, handle_urlhandlers },
 };
 

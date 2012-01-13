@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,7 +28,7 @@
 struct directory;
 
 void
-directory_save(FILE *fp, const struct directory *directory);
+directory_save(FILE *fp, struct directory *directory);
 
 bool
 directory_load(FILE *fp, struct directory *directory,

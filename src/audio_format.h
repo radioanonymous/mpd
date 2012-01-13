@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,6 @@
 #ifndef MPD_AUDIO_FORMAT_H
 #define MPD_AUDIO_FORMAT_H
 
-#include <glib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -43,15 +42,7 @@ enum sample_format {
 	SAMPLE_FORMAT_S24_P32,
 
 	SAMPLE_FORMAT_S32,
-
-	/**
-	 * 32 bit floating point samples in the host's format.  The
-	 * range is -1.0f to +1.0f.
-	 */
-	SAMPLE_FORMAT_FLOAT,
 };
-
-static const unsigned MAX_CHANNELS = 8;
 
 /**
  * This structure describes the format of a raw PCM stream.
@@ -81,7 +72,7 @@ struct audio_format {
 	 * nonzero, then samples are stored in the reverse host byte
 	 * order.
 	 */
-	bool reverse_endian;
+	uint8_t reverse_endian;
 };
 
 /**
@@ -100,7 +91,7 @@ static inline void audio_format_clear(struct audio_format *af)
 	af->sample_rate = 0;
 	af->format = SAMPLE_FORMAT_UNDEFINED;
 	af->channels = 0;
-	af->reverse_endian = false;
+	af->reverse_endian = 0;
 }
 
 /**
@@ -114,7 +105,7 @@ static inline void audio_format_init(struct audio_format *af,
 	af->sample_rate = sample_rate;
 	af->format = (uint8_t)format;
 	af->channels = channels;
-	af->reverse_endian = false;
+	af->reverse_endian = 0;
 }
 
 /**
@@ -174,7 +165,6 @@ audio_valid_sample_format(enum sample_format format)
 	case SAMPLE_FORMAT_S24:
 	case SAMPLE_FORMAT_S24_P32:
 	case SAMPLE_FORMAT_S32:
-	case SAMPLE_FORMAT_FLOAT:
 		return true;
 
 	case SAMPLE_FORMAT_UNDEFINED:
@@ -190,14 +180,13 @@ audio_valid_sample_format(enum sample_format format)
 static inline bool
 audio_valid_channel_count(unsigned channels)
 {
-	return channels >= 1 && channels <= MAX_CHANNELS;
+	return channels >= 1 && channels <= 8;
 }
 
 /**
  * Returns false if the format is not valid for playback with MPD.
  * This function performs some basic validity checks.
  */
-G_GNUC_PURE
 static inline bool audio_format_valid(const struct audio_format *af)
 {
 	return audio_valid_sample_rate(af->sample_rate) &&
@@ -209,7 +198,6 @@ static inline bool audio_format_valid(const struct audio_format *af)
  * Returns false if the format mask is not valid for playback with
  * MPD.  This function performs some basic validity checks.
  */
-G_GNUC_PURE
 static inline bool audio_format_mask_valid(const struct audio_format *af)
 {
 	return (af->sample_rate == 0 ||
@@ -228,15 +216,31 @@ static inline bool audio_format_equals(const struct audio_format *a,
 		a->reverse_endian == b->reverse_endian;
 }
 
-void
+static inline void
 audio_format_mask_apply(struct audio_format *af,
-			const struct audio_format *mask);
-
-G_GNUC_CONST
-static inline unsigned
-sample_format_size(enum sample_format format)
+			const struct audio_format *mask)
 {
-	switch (format) {
+	assert(audio_format_valid(af));
+	assert(audio_format_mask_valid(mask));
+
+	if (mask->sample_rate != 0)
+		af->sample_rate = mask->sample_rate;
+
+	if (mask->format != SAMPLE_FORMAT_UNDEFINED)
+		af->format = mask->format;
+
+	if (mask->channels != 0)
+		af->channels = mask->channels;
+
+	assert(audio_format_valid(af));
+}
+
+/**
+ * Returns the size of each (mono) sample in bytes.
+ */
+static inline unsigned audio_format_sample_size(const struct audio_format *af)
+{
+	switch (af->format) {
 	case SAMPLE_FORMAT_S8:
 		return 1;
 
@@ -248,30 +252,18 @@ sample_format_size(enum sample_format format)
 
 	case SAMPLE_FORMAT_S24_P32:
 	case SAMPLE_FORMAT_S32:
-	case SAMPLE_FORMAT_FLOAT:
 		return 4;
 
 	case SAMPLE_FORMAT_UNDEFINED:
-		return 0;
+		break;
 	}
 
-	assert(false);
 	return 0;
-}
-
-/**
- * Returns the size of each (mono) sample in bytes.
- */
-G_GNUC_PURE
-static inline unsigned audio_format_sample_size(const struct audio_format *af)
-{
-	return sample_format_size((enum sample_format)af->format);
 }
 
 /**
  * Returns the size of each full frame in bytes.
  */
-G_GNUC_PURE
 static inline unsigned
 audio_format_frame_size(const struct audio_format *af)
 {
@@ -282,7 +274,6 @@ audio_format_frame_size(const struct audio_format *af)
  * Returns the floating point factor which converts a time span to a
  * storage size in bytes.
  */
-G_GNUC_PURE
 static inline double audio_format_time_to_size(const struct audio_format *af)
 {
 	return af->sample_rate * audio_format_frame_size(af);
@@ -295,7 +286,6 @@ static inline double audio_format_time_to_size(const struct audio_format *af)
  * @param format a #sample_format enum value
  * @return the string
  */
-G_GNUC_PURE G_GNUC_MALLOC
 const char *
 sample_format_to_string(enum sample_format format);
 
@@ -307,7 +297,6 @@ sample_format_to_string(enum sample_format format);
  * @param s a buffer to print into
  * @return the string, or NULL if the #audio_format object is invalid
  */
-G_GNUC_PURE G_GNUC_MALLOC
 const char *
 audio_format_to_string(const struct audio_format *af,
 		       struct audio_format_string *s);

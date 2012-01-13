@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,8 +23,6 @@
 #include "utils.h"
 #include "conf.h"
 #include "mpd_error.h"
-#include "decoder/pcm_decoder_plugin.h"
-#include "decoder/dsdiff_decoder_plugin.h"
 
 #include <glib.h>
 
@@ -59,7 +57,7 @@ const struct decoder_plugin *const decoder_plugins[] = {
 #ifdef ENABLE_VORBIS_DECODER
 	&vorbis_decoder_plugin,
 #endif
-#if defined(HAVE_FLAC)
+#if defined(HAVE_FLAC) || defined(HAVE_OGGFLAC)
 	&oggflac_decoder_plugin,
 #endif
 #ifdef HAVE_FLAC
@@ -71,7 +69,6 @@ const struct decoder_plugin *const decoder_plugins[] = {
 #ifdef HAVE_AUDIOFILE
 	&audiofile_decoder_plugin,
 #endif
-	&dsdiff_decoder_plugin,
 #ifdef HAVE_FAAD
 	&faad_decoder_plugin,
 #endif
@@ -105,7 +102,6 @@ const struct decoder_plugin *const decoder_plugins[] = {
 #ifdef HAVE_GME
 	&gme_decoder_plugin,
 #endif
-	&pcm_decoder_plugin,
 	NULL
 };
 

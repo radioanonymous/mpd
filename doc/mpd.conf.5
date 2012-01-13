@@ -69,9 +69,6 @@ mpd will be saved to this file when mpd is terminated by a TERM signal or by
 the "kill" command.  When mpd is restarted, it will read the state file and
 restore the state of mpd (including the playlist).
 .TP
-.B restore_paused <yes or no>
-Put MPD into pause mode instead of starting playback after startup.
-.TP
 .B user <username>
 This specifies the user that MPD will run as, if set.  MPD should
 never run as root, and you may use this option to make MPD change its
@@ -82,10 +79,6 @@ as an unprivileged user.
 This specifies which address mpd binds to and listens on.  Multiple
 bind_to_address parameters may be specified.  The default is "any", which binds
 to all available addresses.
-
-You can set a port that is different from the global port setting,
-e.g. "localhost:6602".  IPv6 addresses must be enclosed in square
-brackets if you want to configure a port, e.g. "[::1]:6602".
 
 To bind to a Unix domain socket, specify an absolute path.  For a
 system-wide MPD, we suggest the path "\fB/var/run/mpd/socket\fP".
@@ -266,17 +259,6 @@ of database.
 .B auto_update_depth <N>
 Limit the depth of the directories being watched, 0 means only watch
 the music directory itself.  There is no limit by default.
-.TP
-.B despotify_user <name>
-This specifies the user to use when logging in to Spotify using the despotify plugins.
-.TP
-.B despotify_password <name>
-This specifies the password to use when logging in to Spotify using the despotify plugins.
-.TP
-.B despotify_high_bitrate <yes or no>
-This specifies if the requested bitrate for Spotify should be high or not. Higher sounds
-better but requires more processing and higher bandwidth. Default is yes.
-.TP
 .SH REQUIRED AUDIO OUTPUT PARAMETERS
 .TP
 .B type <type>
@@ -481,9 +463,6 @@ connect to the icecast server.  The default is 2 seconds.
 .TP
 .B description <description>
 This specifies a description of the stream.
-.TP
-.B url <url>
-This specifies a URL associated with the stream.
 .TP
 .B genre <genre>
 This specifies the genre(s) of the stream.

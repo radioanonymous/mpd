@@ -34,7 +34,6 @@ missing
 mkinstalldirs
 mpd
 mpd.exe
-mpd.service
 stamp-h1
 tags
 *~
@@ -61,5 +60,3 @@ test/dump_playlist
 test/run_normalize
 test/tmp
 test/run_inotify
-test/test_queue_priority
-test/run_ntp_server

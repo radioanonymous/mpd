@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,28 +20,29 @@
 #ifndef MPD_DATABASE_H
 #define MPD_DATABASE_H
 
-#include "gcc.h"
-
 #include <glib.h>
 
 #include <sys/time.h>
 #include <stdbool.h>
 
-struct config_param;
 struct directory;
-struct db_selection;
-struct db_visitor;
 
 /**
  * Initialize the database library.
  *
  * @param path the absolute path of the database file
  */
-bool
-db_init(const struct config_param *path, GError **error_r);
+void
+db_init(const char *path);
 
 void
 db_finish(void);
+
+/**
+ * Clear the database.
+ */
+void
+db_clear(void);
 
 /**
  * Returns the root directory object.  Returns NULL if there is no
@@ -50,31 +51,21 @@ db_finish(void);
 struct directory *
 db_get_root(void);
 
-gcc_nonnull(1)
 struct directory *
 db_get_directory(const char *name);
 
-gcc_nonnull(1)
 struct song *
 db_get_song(const char *file);
 
-gcc_nonnull(1,2)
-bool
-db_visit(const struct db_selection *selection,
-	 const struct db_visitor *visitor, void *ctx,
-	 GError **error_r);
-
-gcc_nonnull(1,2)
-bool
-db_walk(const char *uri,
-	const struct db_visitor *visitor, void *ctx,
-	GError **error_r);
+int db_walk(const char *name,
+	    int (*forEachSong)(struct song *, void *),
+	    int (*forEachDir)(struct directory *, void *), void *data);
 
 bool
-db_check(GError **error_r);
+db_check(void);
 
 bool
-db_save(GError **error_r);
+db_save(void);
 
 bool
 db_load(GError **error);

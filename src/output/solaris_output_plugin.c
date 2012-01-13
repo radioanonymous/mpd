@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
  */
 
 #include "config.h"
-#include "solaris_output_plugin.h"
 #include "output_api.h"
 #include "fd_util.h"
 
@@ -54,8 +53,6 @@ struct audio_info {
 #define G_LOG_DOMAIN "solaris_output"
 
 struct solaris_output {
-	struct audio_output base;
-
 	/* configuration */
 	const char *device;
 
@@ -80,35 +77,31 @@ solaris_output_test_default_device(void)
 		access("/dev/audio", W_OK) == 0;
 }
 
-static struct audio_output *
-solaris_output_init(const struct config_param *param, GError **error_r)
+static void *
+solaris_output_init(G_GNUC_UNUSED const struct audio_format *audio_format,
+		    const struct config_param *param,
+		    G_GNUC_UNUSED GError **error)
 {
 	struct solaris_output *so = g_new(struct solaris_output, 1);
 
-	if (!ao_base_init(&so->base, &solaris_output_plugin, param, error_r)) {
-		g_free(so);
-		return NULL;
-	}
-
 	so->device = config_get_block_string(param, "device", "/dev/audio");
 
-	return &so->base;
+	return so;
 }
 
 static void
-solaris_output_finish(struct audio_output *ao)
+solaris_output_finish(void *data)
 {
-	struct solaris_output *so = (struct solaris_output *)ao;
+	struct solaris_output *so = data;
 
-	ao_base_finish(&so->base);
 	g_free(so);
 }
 
 static bool
-solaris_output_open(struct audio_output *ao, struct audio_format *audio_format,
+solaris_output_open(void *data, struct audio_format *audio_format,
 		    GError **error)
 {
-	struct solaris_output *so = (struct solaris_output *)ao;
+	struct solaris_output *so = data;
 	struct audio_info info;
 	int ret, flags;
 
@@ -159,18 +152,17 @@ solaris_output_open(struct audio_output *ao, struct audio_format *audio_format,
 }
 
 static void
-solaris_output_close(struct audio_output *ao)
+solaris_output_close(void *data)
 {
-	struct solaris_output *so = (struct solaris_output *)ao;
+	struct solaris_output *so = data;
 
 	close(so->fd);
 }
 
 static size_t
-solaris_output_play(struct audio_output *ao, const void *chunk, size_t size,
-		    GError **error)
+solaris_output_play(void *data, const void *chunk, size_t size, GError **error)
 {
-	struct solaris_output *so = (struct solaris_output *)ao;
+	struct solaris_output *so = data;
 	ssize_t nbytes;
 
 	nbytes = write(so->fd, chunk, size);
@@ -184,9 +176,9 @@ solaris_output_play(struct audio_output *ao, const void *chunk, size_t size,
 }
 
 static void
-solaris_output_cancel(struct audio_output *ao)
+solaris_output_cancel(void *data)
 {
-	struct solaris_output *so = (struct solaris_output *)ao;
+	struct solaris_output *so = data;
 
 	ioctl(so->fd, I_FLUSH);
 }

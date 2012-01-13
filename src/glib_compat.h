@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -32,12 +32,6 @@
 
 #define g_queue_clear(q) do { g_queue_free(q); q = g_queue_new(); } while (0)
 
-static inline GSource *
-g_timeout_source_new_seconds(guint interval)
-{
-	return g_timeout_source_new(interval * 1000);
-}
-
 static inline guint
 g_timeout_add_seconds(guint interval, GSourceFunc function, gpointer data)
 {
@@ -47,12 +41,6 @@ g_timeout_add_seconds(guint interval, GSourceFunc function, gpointer data)
 #endif /* !2.14 */
 
 #if !GLIB_CHECK_VERSION(2,16,0)
-
-static inline void
-g_prefix_error(G_GNUC_UNUSED GError **error_r,
-	       G_GNUC_UNUSED const gchar *format, ...)
-{
-}
 
 static inline void
 g_propagate_prefixed_error(GError **dest_r, GError *src,
@@ -82,17 +70,6 @@ g_uri_parse_scheme(const char *uri)
 	if (end == NULL)
 		return NULL;
 	return g_strndup(uri, end - uri);
-}
-
-#endif
-
-#if !GLIB_CHECK_VERSION(2,18,0)
-
-static inline void
-g_set_error_literal(GError **err, GQuark domain, gint code,
-		    const gchar *message)
-{
-	g_set_error(err, domain, code, "%s", message);
 }
 
 #endif

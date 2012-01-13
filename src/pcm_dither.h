@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -36,10 +36,12 @@ pcm_dither_24_init(struct pcm_dither *dither)
 
 void
 pcm_dither_24_to_16(struct pcm_dither *dither,
-		    int16_t *dest, const int32_t *src, const int32_t *src_end);
+		    int16_t *dest, const int32_t *src,
+		    unsigned num_samples);
 
 void
 pcm_dither_32_to_16(struct pcm_dither *dither,
-		    int16_t *dest, const int32_t *src, const int32_t *src_end);
+		    int16_t *dest, const int32_t *src,
+		    unsigned num_samples);
 
 #endif

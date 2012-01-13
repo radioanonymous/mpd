@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -94,12 +94,6 @@ mp4_read(void *user_data, void *buffer, uint32_t length)
 {
 	struct mp4ff_input_stream *mis = user_data;
 
-	if (length == 0)
-		/* libmp4ff is known to attempt to read 0 bytes - make
-		   this a special case, because the input_stream API
-		   would not allow this */
-		return 0;
-
 	return decoder_read(mis->decoder, mis->input_stream, buffer, length);
 }
 
@@ -108,8 +102,7 @@ mp4_seek(void *user_data, uint64_t position)
 {
 	struct mp4ff_input_stream *mis = user_data;
 
-	return input_stream_lock_seek(mis->input_stream, position, SEEK_SET,
-				      NULL)
+	return input_stream_seek(mis->input_stream, position, SEEK_SET, NULL)
 		? 0 : -1;
 }
 

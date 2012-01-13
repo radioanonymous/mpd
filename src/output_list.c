@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,29 +20,28 @@
 #include "config.h"
 #include "output_list.h"
 #include "output_api.h"
-#include "output/alsa_output_plugin.h"
-#include "output/ao_output_plugin.h"
-#include "output/ffado_output_plugin.h"
-#include "output/fifo_output_plugin.h"
-#include "output/httpd_output_plugin.h"
-#include "output/jack_output_plugin.h"
-#include "output/mvp_output_plugin.h"
-#include "output/null_output_plugin.h"
-#include "output/openal_output_plugin.h"
-#include "output/oss_output_plugin.h"
-#include "output/osx_output_plugin.h"
-#include "output/pipe_output_plugin.h"
-#include "output/pulse_output_plugin.h"
-#include "output/raop_output_plugin.h"
-#include "output/recorder_output_plugin.h"
-#include "output/roar_output_plugin.h"
-#include "output/shout_output_plugin.h"
-#include "output/solaris_output_plugin.h"
-#include "output/winmm_output_plugin.h"
+
+extern const struct audio_output_plugin shoutPlugin;
+extern const struct audio_output_plugin null_output_plugin;
+extern const struct audio_output_plugin fifo_output_plugin;
+extern const struct audio_output_plugin pipe_output_plugin;
+extern const struct audio_output_plugin alsaPlugin;
+extern const struct audio_output_plugin ao_output_plugin;
+extern const struct audio_output_plugin oss_output_plugin;
+extern const struct audio_output_plugin openal_output_plugin;
+extern const struct audio_output_plugin osxPlugin;
+extern const struct audio_output_plugin solaris_output_plugin;
+extern const struct audio_output_plugin pulse_output_plugin;
+extern const struct audio_output_plugin mvp_output_plugin;
+extern const struct audio_output_plugin jack_output_plugin;
+extern const struct audio_output_plugin httpd_output_plugin;
+extern const struct audio_output_plugin recorder_output_plugin;
+extern const struct audio_output_plugin winmm_output_plugin;
+extern const struct audio_output_plugin ffado_output_plugin;
 
 const struct audio_output_plugin *audio_output_plugins[] = {
 #ifdef HAVE_SHOUT
-	&shout_output_plugin,
+	&shoutPlugin,
 #endif
 	&null_output_plugin,
 #ifdef HAVE_FIFO
@@ -52,10 +51,7 @@ const struct audio_output_plugin *audio_output_plugins[] = {
 	&pipe_output_plugin,
 #endif
 #ifdef HAVE_ALSA
-	&alsa_output_plugin,
-#endif
-#ifdef HAVE_ROAR
-	&roar_output_plugin,
+	&alsaPlugin,
 #endif
 #ifdef HAVE_AO
 	&ao_output_plugin,
@@ -67,10 +63,7 @@ const struct audio_output_plugin *audio_output_plugins[] = {
 	&openal_output_plugin,
 #endif
 #ifdef HAVE_OSX
-	&osx_output_plugin,
-#endif
-#ifdef ENABLE_RAOP_OUTPUT
-	&raop_output_plugin,
+	&osxPlugin,
 #endif
 #ifdef ENABLE_SOLARIS_OUTPUT
 	&solaris_output_plugin,

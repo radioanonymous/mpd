@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
  */
 
 #include "config.h"
-#include "fifo_output_plugin.h"
 #include "output_api.h"
 #include "utils.h"
 #include "timer.h"
@@ -39,13 +38,11 @@
 #define FIFO_BUFFER_SIZE 65536 /* pipe capacity on Linux >= 2.6.11 */
 
 struct fifo_data {
-	struct audio_output base;
-
 	char *path;
 	int input;
 	int output;
 	bool created;
-	struct timer *timer;
+	Timer *timer;
 };
 
 /**
@@ -178,55 +175,54 @@ fifo_open(struct fifo_data *fd, GError **error)
 	return true;
 }
 
-static struct audio_output *
-fifo_output_init(const struct config_param *param,
-		 GError **error_r)
+static void *
+fifo_output_init(G_GNUC_UNUSED const struct audio_format *audio_format,
+		 const struct config_param *param,
+		 GError **error)
 {
 	struct fifo_data *fd;
+	char *value, *path;
 
-	GError *error = NULL;
-	char *path = config_dup_block_path(param, "path", &error);
+	value = config_dup_block_string(param, "path", NULL);
+	if (value == NULL) {
+		g_set_error(error, fifo_output_quark(), errno,
+			    "No \"path\" parameter specified");
+		return NULL;
+	}
+
+	path = parsePath(value);
+	g_free(value);
 	if (!path) {
-		if (error != NULL)
-			g_propagate_error(error_r, error);
-		else
-			g_set_error(error_r, fifo_output_quark(), 0,
-				    "No \"path\" parameter specified");
+		g_set_error(error, fifo_output_quark(), errno,
+			    "Could not parse \"path\" parameter");
 		return NULL;
 	}
 
 	fd = fifo_data_new();
 	fd->path = path;
 
-	if (!ao_base_init(&fd->base, &fifo_output_plugin, param, error_r)) {
+	if (!fifo_open(fd, error)) {
 		fifo_data_free(fd);
 		return NULL;
 	}
 
-	if (!fifo_open(fd, error_r)) {
-		ao_base_finish(&fd->base);
-		fifo_data_free(fd);
-		return NULL;
-	}
-
-	return &fd->base;
+	return fd;
 }
 
 static void
-fifo_output_finish(struct audio_output *ao)
+fifo_output_finish(void *data)
 {
-	struct fifo_data *fd = (struct fifo_data *)ao;
+	struct fifo_data *fd = (struct fifo_data *)data;
 
 	fifo_close(fd);
-	ao_base_finish(&fd->base);
 	fifo_data_free(fd);
 }
 
 static bool
-fifo_output_open(struct audio_output *ao, struct audio_format *audio_format,
+fifo_output_open(void *data, struct audio_format *audio_format,
 		 G_GNUC_UNUSED GError **error)
 {
-	struct fifo_data *fd = (struct fifo_data *)ao;
+	struct fifo_data *fd = (struct fifo_data *)data;
 
 	fd->timer = timer_new(audio_format);
 
@@ -234,17 +230,17 @@ fifo_output_open(struct audio_output *ao, struct audio_format *audio_format,
 }
 
 static void
-fifo_output_close(struct audio_output *ao)
+fifo_output_close(void *data)
 {
-	struct fifo_data *fd = (struct fifo_data *)ao;
+	struct fifo_data *fd = (struct fifo_data *)data;
 
 	timer_free(fd->timer);
 }
 
 static void
-fifo_output_cancel(struct audio_output *ao)
+fifo_output_cancel(void *data)
 {
-	struct fifo_data *fd = (struct fifo_data *)ao;
+	struct fifo_data *fd = (struct fifo_data *)data;
 	char buf[FIFO_BUFFER_SIZE];
 	int bytes = 1;
 
@@ -259,25 +255,18 @@ fifo_output_cancel(struct audio_output *ao)
 	}
 }
 
-static unsigned
-fifo_output_delay(struct audio_output *ao)
-{
-	struct fifo_data *fd = (struct fifo_data *)ao;
-
-	return fd->timer->started
-		? timer_delay(fd->timer)
-		: 0;
-}
-
 static size_t
-fifo_output_play(struct audio_output *ao, const void *chunk, size_t size,
+fifo_output_play(void *data, const void *chunk, size_t size,
 		 GError **error)
 {
-	struct fifo_data *fd = (struct fifo_data *)ao;
+	struct fifo_data *fd = (struct fifo_data *)data;
 	ssize_t bytes;
 
 	if (!fd->timer->started)
 		timer_start(fd->timer);
+	else
+		timer_sync(fd->timer);
+
 	timer_add(fd->timer, size);
 
 	while (true) {
@@ -289,7 +278,7 @@ fifo_output_play(struct audio_output *ao, const void *chunk, size_t size,
 			switch (errno) {
 			case EAGAIN:
 				/* The pipe is full, so empty it */
-				fifo_output_cancel(&fd->base);
+				fifo_output_cancel(fd);
 				continue;
 			case EINTR:
 				continue;
@@ -309,7 +298,6 @@ const struct audio_output_plugin fifo_output_plugin = {
 	.finish = fifo_output_finish,
 	.open = fifo_output_open,
 	.close = fifo_output_close,
-	.delay = fifo_output_delay,
 	.play = fifo_output_play,
 	.cancel = fifo_output_cancel,
 };

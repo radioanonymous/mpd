@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -34,9 +34,7 @@
  * plugin and gzip fetches file from disk
  */
 static struct input_stream *
-input_archive_open(const char *pathname,
-		   GMutex *mutex, GCond *cond,
-		   GError **error_r)
+input_archive_open(const char *pathname, GError **error_r)
 {
 	const struct archive_plugin *arplug;
 	struct archive_file *file;
@@ -67,8 +65,7 @@ input_archive_open(const char *pathname,
 		return NULL;
 
 	//setup fileops
-	is = archive_file_open_stream(file, filename, mutex, cond,
-				      error_r);
+	is = archive_file_open_stream(file, filename, error_r);
 	archive_file_close(file);
 	g_free(pname);
 

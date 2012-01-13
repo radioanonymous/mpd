@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -191,13 +191,13 @@ pulse_mixer_get_volume(struct mixer *mixer, G_GNUC_UNUSED GError **error_r)
 	struct pulse_mixer *pm = (struct pulse_mixer *) mixer;
 	int ret;
 
-	pulse_output_lock(pm->output);
+	pa_threaded_mainloop_lock(pm->output->mainloop);
 
 	ret = pm->online
 		? (int)((100*(pa_cvolume_avg(&pm->volume)+1))/PA_VOLUME_NORM)
 		: -1;
 
-	pulse_output_unlock(pm->output);
+	pa_threaded_mainloop_unlock(pm->output->mainloop);
 
 	return ret;
 }
@@ -209,10 +209,9 @@ pulse_mixer_set_volume(struct mixer *mixer, unsigned volume, GError **error_r)
 	struct pa_cvolume cvolume;
 	bool success;
 
-	pulse_output_lock(pm->output);
-
+	pa_threaded_mainloop_lock(pm->output->mainloop);
 	if (!pm->online) {
-		pulse_output_unlock(pm->output);
+		pa_threaded_mainloop_unlock(pm->output->mainloop);
 		g_set_error(error_r, pulse_mixer_quark(), 0, "disconnected");
 		return false;
 	}
@@ -222,8 +221,7 @@ pulse_mixer_set_volume(struct mixer *mixer, unsigned volume, GError **error_r)
 	success = pulse_output_set_volume(pm->output, &cvolume, error_r);
 	if (success)
 		pm->volume = cvolume;
-
-	pulse_output_unlock(pm->output);
+	pa_threaded_mainloop_unlock(pm->output->mainloop);
 
 	return success;
 }

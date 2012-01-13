@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,6 @@
 #include <glib.h>
 
 #include <mpg123.h>
-#include <stdio.h>
 
 #undef G_LOG_DOMAIN
 #define G_LOG_DOMAIN "mpg123"
@@ -106,7 +105,6 @@ mpd_mpg123_file_decode(struct decoder *decoder, const char *path_fs)
 	int error;
 	off_t num_samples;
 	enum decoder_command cmd;
-	struct mpg123_frameinfo info;
 
 	/* open the file */
 
@@ -126,24 +124,9 @@ mpd_mpg123_file_decode(struct decoder *decoder, const char *path_fs)
 
 	/* tell MPD core we're ready */
 
-	decoder_initialized(decoder, &audio_format, true,
+	decoder_initialized(decoder, &audio_format, false,
 			    (float)num_samples /
 			    (float)audio_format.sample_rate);
-
-	if (mpg123_info(handle, &info) != MPG123_OK) {
-		info.vbr = MPG123_CBR;
-		info.bitrate = 0;
-	}
-
-	switch (info.vbr) {
-	case MPG123_ABR:
-		info.bitrate = info.abr_rate;
-		break;
-	case MPG123_CBR:
-		break;
-	default:
-		info.bitrate = 0;
-	}
 
 	/* the decoder main loop */
 
@@ -161,30 +144,11 @@ mpd_mpg123_file_decode(struct decoder *decoder, const char *path_fs)
 			break;
 		}
 
-		/* update bitrate for ABR/VBR */
-		if (info.vbr != MPG123_CBR) {
-			/* FIXME: maybe skip, as too expensive? */
-			/* FIXME: maybe, (info.vbr == MPG123_VBR) ? */
-			if (mpg123_info (handle, &info) != MPG123_OK)
-				info.bitrate = 0;
-		}
-
 		/* send to MPD */
 
-		cmd = decoder_data(decoder, NULL, buffer, nbytes, info.bitrate);
+		cmd = decoder_data(decoder, NULL, buffer, nbytes, 0);
 
-		if (cmd == DECODE_COMMAND_SEEK) {
-			off_t c = decoder_seek_where(decoder)*audio_format.sample_rate;
-			c = mpg123_seek(handle, c, SEEK_SET);
-			if (c < 0)
-				decoder_seek_error(decoder);
-			else {
-				decoder_command_finished(decoder);
-				decoder_timestamp(decoder, c/(double)audio_format.sample_rate);
-			}
-
-			cmd = DECODE_COMMAND_NONE;
-		}
+		/* seeking not yet implemented */
 	} while (cmd == DECODE_COMMAND_NONE);
 
 	/* cleanup */

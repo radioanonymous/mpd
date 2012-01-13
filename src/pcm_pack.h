@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -40,7 +40,7 @@
  * @param reverse_endian is src and dest in non-host byte order?
  */
 void
-pcm_pack_24(uint8_t *dest, const int32_t *src, const int32_t *src_end,
+pcm_pack_24(uint8_t *dest, const int32_t *src, unsigned num_samples,
 	    bool reverse_endian);
 
 /**
@@ -53,7 +53,7 @@ pcm_pack_24(uint8_t *dest, const int32_t *src, const int32_t *src_end,
  * @param reverse_endian is src and dest in non-host byte order?
  */
 void
-pcm_unpack_24(int32_t *dest, const uint8_t *src, const uint8_t *src_end,
+pcm_unpack_24(int32_t *dest, const uint8_t *src, unsigned num_samples,
 	      bool reverse_endian);
 
 #endif

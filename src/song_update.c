@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -131,9 +131,6 @@ song_file_update(struct song *song)
 
 	song->mtime = st.st_mtime;
 
-	GMutex *mutex = NULL;
-	GCond *cond;
-
 	do {
 		/* load file tag */
 		song->tag = decoder_plugin_tag_dup(plugin, path_fs);
@@ -144,12 +141,8 @@ song_file_update(struct song *song)
 		if (plugin->stream_tag != NULL) {
 			/* open the input_stream (if not already
 			   open) */
-			if (is == NULL) {
-				mutex = g_mutex_new();
-				cond = g_cond_new();
-				is = input_stream_open(path_fs, mutex, cond,
-						       NULL);
-			}
+			if (is == NULL)
+				is = input_stream_open(path_fs, NULL);
 
 			/* now try the stream_tag() method */
 			if (is != NULL) {
@@ -158,7 +151,7 @@ song_file_update(struct song *song)
 				if (song->tag != NULL)
 					break;
 
-				input_stream_lock_seek(is, 0, SEEK_SET, NULL);
+				input_stream_seek(is, 0, SEEK_SET, NULL);
 			}
 		}
 
@@ -167,11 +160,6 @@ song_file_update(struct song *song)
 
 	if (is != NULL)
 		input_stream_close(is);
-
-	if (mutex != NULL) {
-		g_cond_free(cond);
-		g_mutex_free(mutex);
-	}
 
 	if (song->tag != NULL && tag_is_empty(song->tag))
 		song->tag = tag_fallback(path_fs, song->tag);
@@ -202,7 +190,7 @@ song_file_update_inarchive(struct song *song)
 		tag_free(song->tag);
 
 	//accept every file that has music suffix
-	//because we don't support tag reading through
+	//because we dont support tag reading throught
 	//input streams
 	song->tag = tag_new();
 

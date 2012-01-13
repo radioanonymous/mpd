@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -32,7 +32,7 @@
   * connected by IPC socket.
   */
 static const char *remoteUrlPrefixes[] = {
-#if defined(ENABLE_CURL) || defined(ENABLE_SOUP)
+#ifdef ENABLE_CURL
 	"http://",
 #endif
 #ifdef ENABLE_MMS
@@ -48,12 +48,6 @@ static const char *remoteUrlPrefixes[] = {
 	"rtmp://",
 	"rtmpt://",
 	"rtmps://",
-#endif
-#ifdef ENABLE_CDIO_PARANOIA
-	"cdda://",
-#endif
-#ifdef ENABLE_DESPOTIFY
-	"spt://",
 #endif
 	NULL
 };

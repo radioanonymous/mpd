@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -195,7 +195,7 @@ replay_gain_filter_filter(struct filter *_filter,
 
 	memcpy(dest, src, src_size);
 
-	success = pcm_volume(dest, src_size, filter->audio_format.format,
+	success = pcm_volume(dest, src_size, &filter->audio_format,
 			     filter->volume);
 	if (!success) {
 		g_set_error(error_r, replay_gain_quark(), 0,

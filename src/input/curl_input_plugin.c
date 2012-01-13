@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,12 +19,10 @@
 
 #include "config.h"
 #include "input/curl_input_plugin.h"
-#include "input_internal.h"
 #include "input_plugin.h"
 #include "conf.h"
 #include "tag.h"
 #include "icy_metadata.h"
-#include "io_thread.h"
 #include "glib_compat.h"
 
 #include <assert.h>
@@ -52,11 +50,6 @@
 static const size_t CURL_MAX_BUFFERED = 512 * 1024;
 
 /**
- * Resume the stream at this number of bytes after it has been paused.
- */
-static const size_t CURL_RESUME_AT = 384 * 1024;
-
-/**
  * Buffers created by input_curl_writefunction().
  */
 struct buffer {
@@ -80,29 +73,17 @@ struct input_curl {
 
 	/** the curl handles */
 	CURL *easy;
-
-	/** the GMainLoop source used to poll all CURL file
-	    descriptors */
-	GSource *source;
-
-	/** the source id of #source */
-	guint source_id;
-
-	/** a linked list of all registered GPollFD objects */
-	GSList *fds;
+	CURLM *multi;
 
 	/** list of buffers, where input_curl_writefunction() appends
 	    to, and input_curl_read() reads from them */
 	GQueue *buffers;
 
-#if LIBCURL_VERSION_NUM >= 0x071200
-	/**
-	 * Is the connection currently paused?  That happens when the
-	 * buffer was getting too large.  It will be unpaused when the
-	 * buffer is below the threshold again.
-	 */
-	bool paused;
-#endif
+	/** has something been added to the buffers list? */
+	bool buffered;
+
+	/** did libcurl tell us the we're at the end of the response body? */
+	bool eof;
 
 	/** error message provided by libcurl */
 	char error[CURL_ERROR_SIZE];
@@ -116,8 +97,6 @@ struct input_curl {
 	/** the tag object ready to be requested via
 	    input_stream_tag() */
 	struct tag *tag;
-
-	GError *postponed_error;
 };
 
 /** libcurl should accept "ICY 200 OK" */
@@ -127,517 +106,11 @@ static struct curl_slist *http_200_aliases;
 static const char *proxy, *proxy_user, *proxy_password;
 static unsigned proxy_port;
 
-static struct {
-	CURLM *multi;
-
-	/**
-	 * A linked list of all active HTTP requests.  An active
-	 * request is one that doesn't have the "eof" flag set.
-	 */
-	GSList *requests;
-
-	/**
-	 * The GMainLoop source used to poll all CURL file
-	 * descriptors.
-	 */
-	GSource *source;
-
-	/**
-	 * The source id of #source.
-	 */
-	guint source_id;
-
-	GSList *fds;
-
-#if LIBCURL_VERSION_NUM >= 0x070f04
-	/**
-	 * Did CURL give us a timeout?  If yes, then we need to call
-	 * curl_multi_perform(), even if there was no event on any
-	 * file descriptor.
-	 */
-	bool timeout;
-
-	/**
-	 * The absolute time stamp when the timeout expires.  This is
-	 * used in the GSource method check().
-	 */
-	GTimeVal absolute_timeout;
-#endif
-} curl;
-
 static inline GQuark
 curl_quark(void)
 {
 	return g_quark_from_static_string("curl");
 }
-
-/**
- * Find a request by its CURL "easy" handle.
- *
- * Runs in the I/O thread.  No lock needed.
- */
-static struct input_curl *
-input_curl_find_request(CURL *easy)
-{
-	assert(io_thread_inside());
-
-	for (GSList *i = curl.requests; i != NULL; i = g_slist_next(i)) {
-		struct input_curl *c = i->data;
-		if (c->easy == easy)
-			return c;
-	}
-
-	return NULL;
-}
-
-#if LIBCURL_VERSION_NUM >= 0x071200
-
-static gpointer
-input_curl_resume(gpointer data)
-{
-	assert(io_thread_inside());
-
-	struct input_curl *c = data;
-
-	if (c->paused) {
-		c->paused = false;
-		curl_easy_pause(c->easy, CURLPAUSE_CONT);
-	}
-
-	return NULL;
-}
-
-#endif
-
-/**
- * Calculates the GLib event bit mask for one file descriptor,
- * obtained from three #fd_set objects filled by curl_multi_fdset().
- */
-static gushort
-input_curl_fd_events(int fd, fd_set *rfds, fd_set *wfds, fd_set *efds)
-{
-	gushort events = 0;
-
-	if (FD_ISSET(fd, rfds)) {
-		events |= G_IO_IN | G_IO_HUP | G_IO_ERR;
-		FD_CLR(fd, rfds);
-	}
-
-	if (FD_ISSET(fd, wfds)) {
-		events |= G_IO_OUT | G_IO_ERR;
-		FD_CLR(fd, wfds);
-	}
-
-	if (FD_ISSET(fd, efds)) {
-		events |= G_IO_HUP | G_IO_ERR;
-		FD_CLR(fd, efds);
-	}
-
-	return events;
-}
-
-/**
- * Updates all registered GPollFD objects, unregisters old ones,
- * registers new ones.
- *
- * Runs in the I/O thread.  No lock needed.
- */
-static void
-curl_update_fds(void)
-{
-	assert(io_thread_inside());
-
-	fd_set rfds, wfds, efds;
-
-	FD_ZERO(&rfds);
-	FD_ZERO(&wfds);
-	FD_ZERO(&efds);
-
-	int max_fd;
-	CURLMcode mcode = curl_multi_fdset(curl.multi, &rfds, &wfds,
-					   &efds, &max_fd);
-	if (mcode != CURLM_OK) {
-		g_warning("curl_multi_fdset() failed: %s\n",
-			  curl_multi_strerror(mcode));
-		return;
-	}
-
-	GSList *fds = curl.fds;
-	curl.fds = NULL;
-
-	while (fds != NULL) {
-		GPollFD *poll_fd = fds->data;
-		gushort events = input_curl_fd_events(poll_fd->fd, &rfds,
-						      &wfds, &efds);
-
-		assert(poll_fd->events != 0);
-
-		fds = g_slist_remove(fds, poll_fd);
-
-		if (events != poll_fd->events)
-			g_source_remove_poll(curl.source, poll_fd);
-
-		if (events != 0) {
-			if (events != poll_fd->events) {
-				poll_fd->events = events;
-				g_source_add_poll(curl.source, poll_fd);
-			}
-
-			curl.fds = g_slist_prepend(curl.fds, poll_fd);
-		} else {
-			g_free(poll_fd);
-		}
-	}
-
-	for (int fd = 0; fd <= max_fd; ++fd) {
-		gushort events = input_curl_fd_events(fd, &rfds, &wfds, &efds);
-		if (events != 0) {
-			GPollFD *poll_fd = g_new(GPollFD, 1);
-			poll_fd->fd = fd;
-			poll_fd->events = events;
-			g_source_add_poll(curl.source, poll_fd);
-			curl.fds = g_slist_prepend(curl.fds, poll_fd);
-		}
-	}
-}
-
-/**
- * Runs in the I/O thread.  No lock needed.
- */
-static bool
-input_curl_easy_add(struct input_curl *c, GError **error_r)
-{
-	assert(io_thread_inside());
-	assert(c != NULL);
-	assert(c->easy != NULL);
-	assert(input_curl_find_request(c->easy) == NULL);
-
-	curl.requests = g_slist_prepend(curl.requests, c);
-
-	CURLMcode mcode = curl_multi_add_handle(curl.multi, c->easy);
-	if (mcode != CURLM_OK) {
-		g_set_error(error_r, curl_quark(), mcode,
-			    "curl_multi_add_handle() failed: %s",
-			    curl_multi_strerror(mcode));
-		return false;
-	}
-
-	curl_update_fds();
-
-	return true;
-}
-
-struct easy_add_params {
-	struct input_curl *c;
-	GError **error_r;
-};
-
-static gpointer
-input_curl_easy_add_callback(gpointer data)
-{
-	const struct easy_add_params *params = data;
-
-	bool success = input_curl_easy_add(params->c, params->error_r);
-	return GUINT_TO_POINTER(success);
-}
-
-/**
- * Call input_curl_easy_add() in the I/O thread.  May be called from
- * any thread.  Caller must not hold a mutex.
- */
-static bool
-input_curl_easy_add_indirect(struct input_curl *c, GError **error_r)
-{
-	assert(c != NULL);
-	assert(c->easy != NULL);
-
-	struct easy_add_params params = {
-		.c = c,
-		.error_r = error_r,
-	};
-
-	gpointer result =
-		io_thread_call(input_curl_easy_add_callback, &params);
-	return GPOINTER_TO_UINT(result);
-}
-
-/**
- * Frees the current "libcurl easy" handle, and everything associated
- * with it.
- *
- * Runs in the I/O thread.
- */
-static void
-input_curl_easy_free(struct input_curl *c)
-{
-	assert(io_thread_inside());
-	assert(c != NULL);
-
-	if (c->easy == NULL)
-		return;
-
-	curl.requests = g_slist_remove(curl.requests, c);
-
-	curl_multi_remove_handle(curl.multi, c->easy);
-	curl_easy_cleanup(c->easy);
-	c->easy = NULL;
-
-	curl_slist_free_all(c->request_headers);
-	c->request_headers = NULL;
-
-	g_free(c->range);
-	c->range = NULL;
-}
-
-static gpointer
-input_curl_easy_free_callback(gpointer data)
-{
-	struct input_curl *c = data;
-
-	input_curl_easy_free(c);
-	curl_update_fds();
-
-	return NULL;
-}
-
-/**
- * Frees the current "libcurl easy" handle, and everything associated
- * with it.
- *
- * The mutex must not be locked.
- */
-static void
-input_curl_easy_free_indirect(struct input_curl *c)
-{
-	io_thread_call(input_curl_easy_free_callback, c);
-	assert(c->easy == NULL);
-}
-
-/**
- * Abort and free all HTTP requests.
- *
- * Runs in the I/O thread.  The caller must not hold locks.
- */
-static void
-input_curl_abort_all_requests(GError *error)
-{
-	assert(io_thread_inside());
-	assert(error != NULL);
-
-	while (curl.requests != NULL) {
-		struct input_curl *c = curl.requests->data;
-		assert(c->postponed_error == NULL);
-
-		input_curl_easy_free(c);
-
-		g_mutex_lock(c->base.mutex);
-		c->postponed_error = g_error_copy(error);
-		c->base.ready = true;
-		g_cond_broadcast(c->base.cond);
-		g_mutex_unlock(c->base.mutex);
-	}
-
-	g_error_free(error);
-
-}
-
-/**
- * A HTTP request is finished.
- *
- * Runs in the I/O thread.  The caller must not hold locks.
- */
-static void
-input_curl_request_done(struct input_curl *c, CURLcode result, long status)
-{
-	assert(io_thread_inside());
-	assert(c != NULL);
-	assert(c->easy == NULL);
-	assert(c->postponed_error == NULL);
-
-	g_mutex_lock(c->base.mutex);
-
-	if (result != CURLE_OK) {
-		c->postponed_error = g_error_new(curl_quark(), result,
-						 "curl failed: %s",
-						 c->error);
-	} else if (status < 200 || status >= 300) {
-		c->postponed_error = g_error_new(curl_quark(), 0,
-						 "got HTTP status %ld",
-						 status);
-	}
-
-	c->base.ready = true;
-	g_cond_broadcast(c->base.cond);
-	g_mutex_unlock(c->base.mutex);
-}
-
-static void
-input_curl_handle_done(CURL *easy_handle, CURLcode result)
-{
-	struct input_curl *c = input_curl_find_request(easy_handle);
-	assert(c != NULL);
-
-	long status = 0;
-	curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &status);
-
-	input_curl_easy_free(c);
-	input_curl_request_done(c, result, status);
-}
-
-/**
- * Check for finished HTTP responses.
- *
- * Runs in the I/O thread.  The caller must not hold locks.
- */
-static void
-input_curl_info_read(void)
-{
-	assert(io_thread_inside());
-
-	CURLMsg *msg;
-	int msgs_in_queue;
-
-	while ((msg = curl_multi_info_read(curl.multi,
-					   &msgs_in_queue)) != NULL) {
-		if (msg->msg == CURLMSG_DONE)
-			input_curl_handle_done(msg->easy_handle, msg->data.result);
-	}
-}
-
-/**
- * Give control to CURL.
- *
- * Runs in the I/O thread.  The caller must not hold locks.
- */
-static bool
-input_curl_perform(void)
-{
-	assert(io_thread_inside());
-
-	CURLMcode mcode;
-
-	do {
-		int running_handles;
-		mcode = curl_multi_perform(curl.multi, &running_handles);
-	} while (mcode == CURLM_CALL_MULTI_PERFORM);
-
-	if (mcode != CURLM_OK && mcode != CURLM_CALL_MULTI_PERFORM) {
-		GError *error = g_error_new(curl_quark(), mcode,
-					    "curl_multi_perform() failed: %s",
-					    curl_multi_strerror(mcode));
-		input_curl_abort_all_requests(error);
-		return false;
-	}
-
-	return true;
-}
-
-/*
- * GSource methods
- *
- */
-
-/**
- * The GSource prepare() method implementation.
- */
-static gboolean
-input_curl_source_prepare(G_GNUC_UNUSED GSource *source, gint *timeout_r)
-{
-	curl_update_fds();
-
-#if LIBCURL_VERSION_NUM >= 0x070f04
-	curl.timeout = false;
-
-	long timeout2;
-	CURLMcode mcode = curl_multi_timeout(curl.multi, &timeout2);
-	if (mcode == CURLM_OK) {
-		if (timeout2 >= 0) {
-			g_source_get_current_time(source,
-						  &curl.absolute_timeout);
-			g_time_val_add(&curl.absolute_timeout,
-				       timeout2 * 1000);
-		}
-
-		if (timeout2 >= 0 && timeout2 < 10)
-			/* CURL 7.21.1 likes to report "timeout=0",
-			   which means we're running in a busy loop.
-			   Quite a bad idea to waste so much CPU.
-			   Let's use a lower limit of 10ms. */
-			timeout2 = 10;
-
-		*timeout_r = timeout2;
-
-		curl.timeout = timeout2 >= 0;
-	} else
-		g_warning("curl_multi_timeout() failed: %s\n",
-			  curl_multi_strerror(mcode));
-#else
-	(void)timeout_r;
-#endif
-
-	return false;
-}
-
-/**
- * The GSource check() method implementation.
- */
-static gboolean
-input_curl_source_check(G_GNUC_UNUSED GSource *source)
-{
-#if LIBCURL_VERSION_NUM >= 0x070f04
-	if (curl.timeout) {
-		/* when a timeout has expired, we need to call
-		   curl_multi_perform(), even if there was no file
-		   descriptor event */
-
-		GTimeVal now;
-		g_source_get_current_time(source, &now);
-		if (now.tv_sec > curl.absolute_timeout.tv_sec ||
-		    (now.tv_sec == curl.absolute_timeout.tv_sec &&
-		     now.tv_usec >= curl.absolute_timeout.tv_usec))
-			return true;
-	}
-#endif
-
-	for (GSList *i = curl.fds; i != NULL; i = i->next) {
-		GPollFD *poll_fd = i->data;
-		if (poll_fd->revents != 0)
-			return true;
-	}
-
-	return false;
-}
-
-/**
- * The GSource dispatch() method implementation.  The callback isn't
- * used, because we're handling all events directly.
- */
-static gboolean
-input_curl_source_dispatch(G_GNUC_UNUSED GSource *source,
-			   G_GNUC_UNUSED GSourceFunc callback,
-			   G_GNUC_UNUSED gpointer user_data)
-{
-	if (input_curl_perform())
-		input_curl_info_read();
-
-	return true;
-}
-
-/**
- * The vtable for our GSource implementation.  Unfortunately, we
- * cannot declare it "const", because g_source_new() takes a non-const
- * pointer, for whatever reason.
- */
-static GSourceFuncs curl_source_funcs = {
-	.prepare = input_curl_source_prepare,
-	.check = input_curl_source_check,
-	.dispatch = input_curl_source_dispatch,
-};
-
-/*
- * input_plugin methods
- *
- */
 
 static bool
 input_curl_init(const struct config_param *param,
@@ -645,9 +118,8 @@ input_curl_init(const struct config_param *param,
 {
 	CURLcode code = curl_global_init(CURL_GLOBAL_ALL);
 	if (code != CURLE_OK) {
-		g_set_error(error_r, curl_quark(), code,
-			    "curl_global_init() failed: %s\n",
-			    curl_easy_strerror(code));
+		g_warning("curl_global_init() failed: %s\n",
+			  curl_easy_strerror(code));
 		return false;
 	}
 
@@ -668,48 +140,20 @@ input_curl_init(const struct config_param *param,
 						   "");
 	}
 
-	curl.multi = curl_multi_init();
-	if (curl.multi == NULL) {
-		g_set_error(error_r, curl_quark(), 0,
-			    "curl_multi_init() failed");
-		return false;
-	}
-
-	curl.source = g_source_new(&curl_source_funcs, sizeof(*curl.source));
-	curl.source_id = g_source_attach(curl.source, io_thread_context());
-
 	return true;
-}
-
-static gpointer
-curl_destroy_sources(G_GNUC_UNUSED gpointer data)
-{
-	g_source_destroy(curl.source);
-
-	return NULL;
 }
 
 static void
 input_curl_finish(void)
 {
-	assert(curl.requests == NULL);
-
-	io_thread_call(curl_destroy_sources, NULL);
-
-	curl_multi_cleanup(curl.multi);
-
 	curl_slist_free_all(http_200_aliases);
 
 	curl_global_cleanup();
 }
 
-#if LIBCURL_VERSION_NUM >= 0x071200
-
 /**
  * Determine the total sizes of all buffers, including portions that
  * have already been consumed.
- *
- * The caller must lock the mutex.
  */
 G_GNUC_PURE
 static size_t
@@ -726,8 +170,6 @@ curl_total_buffer_size(const struct input_curl *c)
 	return total;
 }
 
-#endif
-
 static void
 buffer_free_callback(gpointer data, G_GNUC_UNUSED gpointer user_data)
 {
@@ -738,15 +180,31 @@ buffer_free_callback(gpointer data, G_GNUC_UNUSED gpointer user_data)
 	g_free(buffer);
 }
 
+/**
+ * Frees the current "libcurl easy" handle, and everything associated
+ * with it.
+ */
 static void
-input_curl_flush_buffers(struct input_curl *c)
+input_curl_easy_free(struct input_curl *c)
 {
+	if (c->easy != NULL) {
+		curl_multi_remove_handle(c->multi, c->easy);
+		curl_easy_cleanup(c->easy);
+		c->easy = NULL;
+	}
+
+	curl_slist_free_all(c->request_headers);
+	c->request_headers = NULL;
+
+	g_free(c->range);
+	c->range = NULL;
+
 	g_queue_foreach(c->buffers, buffer_free_callback, NULL);
 	g_queue_clear(c->buffers);
 }
 
 /**
- * Frees this stream, including the input_stream struct.
+ * Frees this stream (but not the input_stream struct itself).
  */
 static void
 input_curl_free(struct input_curl *c)
@@ -755,31 +213,16 @@ input_curl_free(struct input_curl *c)
 		tag_free(c->tag);
 	g_free(c->meta_name);
 
-	input_curl_easy_free_indirect(c);
-	input_curl_flush_buffers(c);
+	input_curl_easy_free(c);
+
+	if (c->multi != NULL)
+		curl_multi_cleanup(c->multi);
 
 	g_queue_free(c->buffers);
-
-	if (c->postponed_error != NULL)
-		g_error_free(c->postponed_error);
 
 	g_free(c->url);
 	input_stream_deinit(&c->base);
 	g_free(c);
-}
-
-static bool
-input_curl_check(struct input_stream *is, GError **error_r)
-{
-	struct input_curl *c = (struct input_curl *)is;
-
-	bool success = c->postponed_error == NULL;
-	if (!success) {
-		g_propagate_error(error_r, c->postponed_error);
-		c->postponed_error = NULL;
-	}
-
-	return success;
 }
 
 static struct tag *
@@ -793,15 +236,119 @@ input_curl_tag(struct input_stream *is)
 }
 
 static bool
-fill_buffer(struct input_curl *c, GError **error_r)
+input_curl_multi_info_read(struct input_curl *c, GError **error_r)
 {
-	while (c->easy != NULL && g_queue_is_empty(c->buffers))
-		g_cond_wait(c->base.cond, c->base.mutex);
+	CURLMsg *msg;
+	int msgs_in_queue;
 
-	if (c->postponed_error != NULL) {
-		g_propagate_error(error_r, c->postponed_error);
-		c->postponed_error = NULL;
-		return false;
+	while ((msg = curl_multi_info_read(c->multi,
+					   &msgs_in_queue)) != NULL) {
+		if (msg->msg == CURLMSG_DONE) {
+			c->eof = true;
+			c->base.ready = true;
+
+			if (msg->data.result != CURLE_OK) {
+				g_set_error(error_r, curl_quark(),
+					    msg->data.result,
+					    "curl failed: %s", c->error);
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Wait for the libcurl socket.
+ *
+ * @return -1 on error, 0 if no data is available yet, 1 if data is
+ * available
+ */
+static int
+input_curl_select(struct input_curl *c, GError **error_r)
+{
+	fd_set rfds, wfds, efds;
+	int max_fd, ret;
+	CURLMcode mcode;
+	struct timeval timeout = {
+		.tv_sec = 1,
+		.tv_usec = 0,
+	};
+
+	assert(!c->eof);
+
+	FD_ZERO(&rfds);
+	FD_ZERO(&wfds);
+	FD_ZERO(&efds);
+
+	mcode = curl_multi_fdset(c->multi, &rfds, &wfds, &efds, &max_fd);
+	if (mcode != CURLM_OK) {
+		g_set_error(error_r, curl_quark(), mcode,
+			    "curl_multi_fdset() failed: %s",
+			    curl_multi_strerror(mcode));
+		return -1;
+	}
+
+#if LIBCURL_VERSION_NUM >= 0x070f04
+	long timeout2;
+	mcode = curl_multi_timeout(c->multi, &timeout2);
+	if (mcode != CURLM_OK) {
+		g_warning("curl_multi_timeout() failed: %s\n",
+			  curl_multi_strerror(mcode));
+		return -1;
+	}
+
+	if (timeout2 >= 0) {
+		if (timeout2 > 10000)
+			timeout2 = 10000;
+
+		timeout.tv_sec = timeout2 / 1000;
+		timeout.tv_usec = (timeout2 % 1000) * 1000;
+	}
+#endif
+
+	ret = select(max_fd + 1, &rfds, &wfds, &efds, &timeout);
+	if (ret < 0)
+		g_set_error(error_r, g_quark_from_static_string("errno"),
+			    errno,
+			    "select() failed: %s\n", g_strerror(errno));
+
+	return ret;
+}
+
+static bool
+fill_buffer(struct input_stream *is, GError **error_r)
+{
+	struct input_curl *c = (struct input_curl *)is;
+	CURLMcode mcode = CURLM_CALL_MULTI_PERFORM;
+
+	while (!c->eof && g_queue_is_empty(c->buffers)) {
+		int running_handles;
+		bool bret;
+
+		if (mcode != CURLM_CALL_MULTI_PERFORM) {
+			/* if we're still here, there is no input yet
+			   - wait for input */
+			int ret = input_curl_select(c, error_r);
+			if (ret <= 0)
+				/* no data yet or error */
+				return false;
+		}
+
+		mcode = curl_multi_perform(c->multi, &running_handles);
+		if (mcode != CURLM_OK && mcode != CURLM_CALL_MULTI_PERFORM) {
+			g_set_error(error_r, curl_quark(), mcode,
+				    "curl_multi_perform() failed: %s",
+				    curl_multi_strerror(mcode));
+			c->eof = true;
+			is->ready = true;
+			return false;
+		}
+
+		bret = input_curl_multi_info_read(c, error_r);
+		if (!bret)
+			return false;
 	}
 
 	return !g_queue_is_empty(c->buffers);
@@ -897,15 +444,6 @@ copy_icy_tag(struct input_curl *c)
 	c->tag = tag;
 }
 
-static bool
-input_curl_available(struct input_stream *is)
-{
-	struct input_curl *c = (struct input_curl *)is;
-
-	return c->postponed_error != NULL || c->easy == NULL ||
-		!g_queue_is_empty(c->buffers);
-}
-
 static size_t
 input_curl_read(struct input_stream *is, void *ptr, size_t size,
 		GError **error_r)
@@ -918,7 +456,7 @@ input_curl_read(struct input_stream *is, void *ptr, size_t size,
 	do {
 		/* fill the buffer */
 
-		success = fill_buffer(c, error_r);
+		success = fill_buffer(is, error_r);
 		if (!success)
 			return 0;
 
@@ -938,14 +476,6 @@ input_curl_read(struct input_stream *is, void *ptr, size_t size,
 
 	is->offset += (goffset)nbytes;
 
-#if LIBCURL_VERSION_NUM >= 0x071200
-	if (c->paused && curl_total_buffer_size(c) < CURL_RESUME_AT) {
-		g_mutex_unlock(c->base.mutex);
-		io_thread_call(input_curl_resume, c);
-		g_mutex_lock(c->base.mutex);
-	}
-#endif
-
 	return nbytes;
 }
 
@@ -962,7 +492,49 @@ input_curl_eof(G_GNUC_UNUSED struct input_stream *is)
 {
 	struct input_curl *c = (struct input_curl *)is;
 
-	return c->easy == NULL && g_queue_is_empty(c->buffers);
+	return c->eof && g_queue_is_empty(c->buffers);
+}
+
+static int
+input_curl_buffer(struct input_stream *is, GError **error_r)
+{
+	struct input_curl *c = (struct input_curl *)is;
+
+	if (curl_total_buffer_size(c) >= CURL_MAX_BUFFERED)
+		return 0;
+
+	CURLMcode mcode;
+	int running_handles;
+	bool ret;
+
+	c->buffered = false;
+
+	if (!is->ready && !c->eof)
+		/* not ready yet means the caller is waiting in a busy
+		   loop; relax that by calling select() on the
+		   socket */
+		if (input_curl_select(c, error_r) < 0)
+			return -1;
+
+	do {
+		mcode = curl_multi_perform(c->multi, &running_handles);
+	} while (mcode == CURLM_CALL_MULTI_PERFORM &&
+		 g_queue_is_empty(c->buffers));
+
+	if (mcode != CURLM_OK && mcode != CURLM_CALL_MULTI_PERFORM) {
+		g_set_error(error_r, curl_quark(), mcode,
+			    "curl_multi_perform() failed: %s",
+			    curl_multi_strerror(mcode));
+		c->eof = true;
+		is->ready = true;
+		return -1;
+	}
+
+	ret = input_curl_multi_info_read(c, error_r);
+	if (!ret)
+		return -1;
+
+	return c->buffered;
 }
 
 /** called by curl when new data is available */
@@ -1060,26 +632,14 @@ input_curl_writefunction(void *ptr, size_t size, size_t nmemb, void *stream)
 	if (size == 0)
 		return 0;
 
-	g_mutex_lock(c->base.mutex);
-
-#if LIBCURL_VERSION_NUM >= 0x071200
-	if (curl_total_buffer_size(c) + size >= CURL_MAX_BUFFERED) {
-		c->paused = true;
-		g_mutex_unlock(c->base.mutex);
-		return CURL_WRITEFUNC_PAUSE;
-	}
-#endif
-
 	buffer = g_malloc(sizeof(*buffer) - sizeof(buffer->data) + size);
 	buffer->size = size;
 	buffer->consumed = 0;
 	memcpy(buffer->data, ptr, size);
-
 	g_queue_push_tail(c->buffers, buffer);
-	c->base.ready = true;
 
-	g_cond_broadcast(c->base.cond);
-	g_mutex_unlock(c->base.mutex);
+	c->buffered = true;
+	c->base.ready = true;
 
 	return size;
 }
@@ -1088,11 +648,22 @@ static bool
 input_curl_easy_init(struct input_curl *c, GError **error_r)
 {
 	CURLcode code;
+	CURLMcode mcode;
+
+	c->eof = false;
 
 	c->easy = curl_easy_init();
 	if (c->easy == NULL) {
 		g_set_error(error_r, curl_quark(), 0,
 			    "curl_easy_init() failed");
+		return false;
+	}
+
+	mcode = curl_multi_add_handle(c->multi, c->easy);
+	if (mcode != CURLM_OK) {
+		g_set_error(error_r, curl_quark(), mcode,
+			    "curl_multi_add_handle() failed: %s",
+			    curl_multi_strerror(mcode));
 		return false;
 	}
 
@@ -1106,7 +677,6 @@ input_curl_easy_init(struct input_curl *c, GError **error_r)
 	curl_easy_setopt(c->easy, CURLOPT_WRITEDATA, c);
 	curl_easy_setopt(c->easy, CURLOPT_HTTP200ALIASES, http_200_aliases);
 	curl_easy_setopt(c->easy, CURLOPT_FOLLOWLOCATION, 1);
-	curl_easy_setopt(c->easy, CURLOPT_NETRC, 1);
 	curl_easy_setopt(c->easy, CURLOPT_MAXREDIRS, 5);
 	curl_easy_setopt(c->easy, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(c->easy, CURLOPT_ERRORBUFFER, c->error);
@@ -1139,6 +709,38 @@ input_curl_easy_init(struct input_curl *c, GError **error_r)
 	c->request_headers = curl_slist_append(c->request_headers,
 					       "Icy-Metadata: 1");
 	curl_easy_setopt(c->easy, CURLOPT_HTTPHEADER, c->request_headers);
+
+	return true;
+}
+
+void
+input_curl_reinit(struct input_stream *is)
+{
+	struct input_curl *c = (struct input_curl *)is;
+
+	assert(c->base.plugin == &input_plugin_curl);
+	assert(c->easy != NULL);
+
+	curl_easy_setopt(c->easy, CURLOPT_WRITEHEADER, is);
+	curl_easy_setopt(c->easy, CURLOPT_WRITEDATA, is);
+}
+
+static bool
+input_curl_send_request(struct input_curl *c, GError **error_r)
+{
+	CURLMcode mcode;
+	int running_handles;
+
+	do {
+		mcode = curl_multi_perform(c->multi, &running_handles);
+	} while (mcode == CURLM_CALL_MULTI_PERFORM);
+
+	if (mcode != CURLM_OK) {
+		g_set_error(error_r, curl_quark(), mcode,
+			    "curl_multi_perform() failed: %s",
+			    curl_multi_strerror(mcode));
+		return false;
+	}
 
 	return true;
 }
@@ -1208,16 +810,14 @@ input_curl_seek(struct input_stream *is, goffset offset, int whence,
 
 	/* close the old connection and open a new one */
 
-	g_mutex_unlock(c->base.mutex);
-
-	input_curl_easy_free_indirect(c);
-	input_curl_flush_buffers(c);
+	input_curl_easy_free(c);
 
 	is->offset = offset;
 	if (is->offset == is->size) {
 		/* seek to EOF: simulate empty result; avoid
 		   triggering a "416 Requested Range Not Satisfiable"
 		   response */
+		c->eof = true;
 		return true;
 	}
 
@@ -1232,59 +832,53 @@ input_curl_seek(struct input_stream *is, goffset offset, int whence,
 		curl_easy_setopt(c->easy, CURLOPT_RANGE, c->range);
 	}
 
-	c->base.ready = false;
-
-	if (!input_curl_easy_add_indirect(c, error_r))
+	ret = input_curl_send_request(c, error_r);
+	if (!ret)
 		return false;
 
-	g_mutex_lock(c->base.mutex);
-
-	while (!c->base.ready)
-		g_cond_wait(c->base.cond, c->base.mutex);
-
-	if (c->postponed_error != NULL) {
-		g_propagate_error(error_r, c->postponed_error);
-		c->postponed_error = NULL;
-		return false;
-	}
-
-	return true;
+	return input_curl_multi_info_read(c, error_r);
 }
 
 static struct input_stream *
-input_curl_open(const char *url, GMutex *mutex, GCond *cond,
-		GError **error_r)
+input_curl_open(const char *url, GError **error_r)
 {
-	assert(mutex != NULL);
-	assert(cond != NULL);
-
 	struct input_curl *c;
+	bool ret;
 
 	if (strncmp(url, "http://", 7) != 0)
 		return NULL;
 
 	c = g_new0(struct input_curl, 1);
-	input_stream_init(&c->base, &input_plugin_curl, url,
-			  mutex, cond);
+	input_stream_init(&c->base, &input_plugin_curl, url);
 
 	c->url = g_strdup(url);
 	c->buffers = g_queue_new();
 
-	icy_clear(&c->icy_metadata);
-	c->tag = NULL;
-
-	c->postponed_error = NULL;
-
-#if LIBCURL_VERSION_NUM >= 0x071200
-	c->paused = false;
-#endif
-
-	if (!input_curl_easy_init(c, error_r)) {
+	c->multi = curl_multi_init();
+	if (c->multi == NULL) {
+		g_set_error(error_r, curl_quark(), 0,
+			    "curl_multi_init() failed");
 		input_curl_free(c);
 		return NULL;
 	}
 
-	if (!input_curl_easy_add_indirect(c, error_r)) {
+	icy_clear(&c->icy_metadata);
+	c->tag = NULL;
+
+	ret = input_curl_easy_init(c, error_r);
+	if (!ret) {
+		input_curl_free(c);
+		return NULL;
+	}
+
+	ret = input_curl_send_request(c, error_r);
+	if (!ret) {
+		input_curl_free(c);
+		return NULL;
+	}
+
+	ret = input_curl_multi_info_read(c, error_r);
+	if (!ret) {
 		input_curl_free(c);
 		return NULL;
 	}
@@ -1299,9 +893,8 @@ const struct input_plugin input_plugin_curl = {
 
 	.open = input_curl_open,
 	.close = input_curl_close,
-	.check = input_curl_check,
 	.tag = input_curl_tag,
-	.available = input_curl_available,
+	.buffer = input_curl_buffer,
 	.read = input_curl_read,
 	.eof = input_curl_eof,
 	.seek = input_curl_seek,

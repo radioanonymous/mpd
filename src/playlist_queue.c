@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,25 +22,23 @@
 #include "playlist_plugin.h"
 #include "playlist_any.h"
 #include "playlist_song.h"
-#include "playlist.h"
 #include "song.h"
 #include "input_stream.h"
 
 enum playlist_result
 playlist_load_into_queue(const char *uri, struct playlist_provider *source,
-			 struct playlist *dest, struct player_control *pc,
-			 bool secure)
+			 struct playlist *dest)
 {
 	enum playlist_result result;
 	struct song *song;
 	char *base_uri = uri != NULL ? g_path_get_dirname(uri) : NULL;
 
 	while ((song = playlist_plugin_read(source)) != NULL) {
-		song = playlist_check_translate_song(song, base_uri, secure);
+		song = playlist_check_translate_song(song, base_uri);
 		if (song == NULL)
 			continue;
 
-		result = playlist_append_song(dest, pc, song, NULL);
+		result = playlist_append_song(dest, song, NULL);
 		if (result != PLAYLIST_RESULT_SUCCESS) {
 			if (!song_in_database(song))
 				song_free(song);
@@ -55,31 +53,19 @@ playlist_load_into_queue(const char *uri, struct playlist_provider *source,
 }
 
 enum playlist_result
-playlist_open_into_queue(const char *uri,
-			 struct playlist *dest, struct player_control *pc,
-			 bool secure)
+playlist_open_into_queue(const char *uri, struct playlist *dest)
 {
-	GMutex *mutex = g_mutex_new();
-	GCond *cond = g_cond_new();
-
 	struct input_stream *is;
-	struct playlist_provider *playlist =
-		playlist_open_any(uri, mutex, cond, &is);
-	if (playlist == NULL) {
-		g_cond_free(cond);
-		g_mutex_free(mutex);
+	struct playlist_provider *playlist = playlist_open_any(uri, &is);
+	if (playlist == NULL)
 		return PLAYLIST_RESULT_NO_SUCH_LIST;
-	}
 
 	enum playlist_result result =
-		playlist_load_into_queue(uri, playlist, dest, pc, secure);
+		playlist_load_into_queue(uri, playlist, dest);
 	playlist_plugin_close(playlist);
 
 	if (is != NULL)
 		input_stream_close(is);
-
-	g_cond_free(cond);
-	g_mutex_free(mutex);
 
 	return result;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -74,20 +74,5 @@ const int32_t *
 pcm_convert_to_32(struct pcm_buffer *buffer,
 		  enum sample_format src_format, const void *src,
 		  size_t src_size, size_t *dest_size_r);
-
-/**
- * Converts PCM samples to 32 bit floating point.
- *
- * @param buffer a pcm_buffer object
- * @param bits the number of in the source buffer
- * @param src the source PCM buffer
- * @param src_size the size of #src in bytes
- * @param dest_size_r returns the number of bytes of the destination buffer
- * @return the destination buffer
- */
-const float *
-pcm_convert_to_float(struct pcm_buffer *buffer,
-		     enum sample_format src_format, const void *src,
-		     size_t src_size, size_t *dest_size_r);
 
 #endif

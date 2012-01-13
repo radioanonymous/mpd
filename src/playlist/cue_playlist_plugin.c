@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -41,8 +41,7 @@ struct cue_playlist {
 };
 
 static struct playlist_provider *
-cue_playlist_open_uri(const char *uri,
-		      G_GNUC_UNUSED GMutex *mutex, G_GNUC_UNUSED GCond *cond)
+cue_playlist_open_uri(const char *uri)
 {
 	struct cue_playlist *playlist;
 	FILE *file;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,7 +23,6 @@
 #include "client.h"
 #include "conf.h"
 #include "glib_compat.h"
-#include "main.h"
 
 #include <string.h>
 #include <assert.h>
@@ -40,7 +39,7 @@ static void
 listen_callback(int fd, const struct sockaddr *address,
 		size_t address_length, int uid, G_GNUC_UNUSED void *ctx)
 {
-	client_new(global_player_control, fd, address, address_length, uid);
+	client_new(fd, address, address_length, uid);
 }
 
 static bool

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,14 +18,8 @@
  */
 
 #include "config.h"
-
-#ifdef HAVE_STRUCT_UCRED
-#define _GNU_SOURCE 1
-#endif
-
 #include "server_socket.h"
 #include "socket_util.h"
-#include "resolver.h"
 #include "fd_util.h"
 #include "glib_compat.h"
 #include "glib_socket.h"
@@ -40,6 +34,7 @@
 #include <assert.h>
 
 #ifdef WIN32
+#define WINVER 0x0501
 #include <ws2tcpip.h>
 #include <winsock.h>
 #else
@@ -161,16 +156,12 @@ server_socket_in_event(G_GNUC_UNUSED GIOChannel *source,
 	size_t address_length = sizeof(address);
 	int fd = accept_cloexec_nonblock(s->fd, (struct sockaddr*)&address,
 					 &address_length);
-	if (fd >= 0) {
-		if (socket_keepalive(fd))
-			g_warning("Could not set TCP keepalive option: %s",
-				  g_strerror(errno));
+	if (fd >= 0)
 		s->parent->callback(fd, (const struct sockaddr*)&address,
 				    address_length, get_remote_uid(fd),
 				    s->parent->callback_ctx);
-	} else {
+	else
 		g_warning("accept() failed: %s", g_strerror(errno));
-	}
 
 	return true;
 }
@@ -379,11 +370,24 @@ server_socket_add_host(struct server_socket *ss, const char *hostname,
 		       unsigned port, GError **error_r)
 {
 #ifdef HAVE_TCP
-	struct addrinfo *ai = resolve_host_port(hostname, port,
-						AI_PASSIVE, SOCK_STREAM,
-						error_r);
-	if (ai == NULL)
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_flags = AI_PASSIVE;
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+
+	char service[20];
+	g_snprintf(service, sizeof(service), "%u", port);
+
+	struct addrinfo *ai;
+	int ret = getaddrinfo(hostname, service, &hints, &ai);
+	if (ret != 0) {
+		g_set_error(error_r, server_socket_quark(), ret,
+			    "Failed to look up host \"%s\": %s",
+			    hostname, gai_strerror(ret));
 		return false;
+	}
 
 	for (const struct addrinfo *i = ai; i != NULL; i = i->ai_next)
 		server_socket_add_address(ss, i->ai_addr, i->ai_addrlen);

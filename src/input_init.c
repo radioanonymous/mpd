@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,6 @@
 #include "conf.h"
 #include "glib_compat.h"
 
-#include <assert.h>
 #include <string.h>
 
 static inline GQuark
@@ -68,11 +67,6 @@ input_stream_global_init(GError **error_r)
 
 	for (unsigned i = 0; input_plugins[i] != NULL; ++i) {
 		const struct input_plugin *plugin = input_plugins[i];
-
-		assert(plugin->name != NULL);
-		assert(*plugin->name != 0);
-		assert(plugin->open != NULL);
-
 		const struct config_param *param =
 			input_plugin_config(plugin->name, &error);
 		if (param == NULL && error != NULL) {

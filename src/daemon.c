@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -80,7 +80,7 @@ daemonize_kill(void)
 
 	ret = kill(pid, SIGTERM);
 	if (ret < 0)
-		MPD_ERROR("unable to kill process %i: %s",
+		MPD_ERROR("unable to kill proccess %i: %s",
 			  pid, g_strerror(errno));
 
 	exit(EXIT_SUCCESS);

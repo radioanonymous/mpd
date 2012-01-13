@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,6 @@
 #include "directory.h"
 #include "song.h"
 #include "path.h"
-#include "db_visitor.h"
 
 #include <glib.h>
 
@@ -168,42 +167,28 @@ directory_sort(struct directory *directory)
 		directory_sort(dv->base[i]);
 }
 
-bool
-directory_walk(const struct directory *directory, bool recursive,
-	       const struct db_visitor *visitor, void *ctx,
-	       GError **error_r)
+int
+directory_walk(struct directory *directory,
+	       int (*forEachSong)(struct song *, void *),
+	       int (*forEachDir)(struct directory *, void *),
+	       void *data)
 {
-	assert(directory != NULL);
-	assert(visitor != NULL);
-	assert(error_r == NULL || *error_r == NULL);
+	struct dirvec *dv = &directory->children;
+	int err = 0;
+	size_t j;
 
-	if (visitor->song != NULL) {
-		const struct songvec *sv = &directory->songs;
-		for (size_t i = 0; i < sv->nr; ++i)
-			if (!visitor->song(sv->base[i], ctx, error_r))
-				return false;
+	if (forEachDir && (err = forEachDir(directory, data)) < 0)
+		return err;
+
+	if (forEachSong) {
+		err = songvec_for_each(&directory->songs, forEachSong, data);
+		if (err < 0)
+			return err;
 	}
 
-	if (visitor->playlist != NULL) {
-		const struct playlist_vector *pv = &directory->playlists;
-		for (const struct playlist_metadata *i = pv->head;
-		     i != NULL; i = i->next)
-			if (!visitor->playlist(i, directory, ctx, error_r))
-				return false;
-	}
+	for (j = 0; err >= 0 && j < dv->nr; ++j)
+		err = directory_walk(dv->base[j], forEachSong,
+						forEachDir, data);
 
-	const struct dirvec *dv = &directory->children;
-	for (size_t i = 0; i < dv->nr; ++i) {
-		struct directory *child = dv->base[i];
-
-		if (visitor->directory != NULL &&
-		    !visitor->directory(child, ctx, error_r))
-			return false;
-
-		if (recursive &&
-		    !directory_walk(child, recursive, visitor, ctx, error_r))
-			return false;
-	}
-
-	return true;
+	return err;
 }

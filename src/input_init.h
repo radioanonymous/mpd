@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,7 +28,7 @@
 /**
  * Initializes this library and all input_stream implementations.
  *
- * @param error_r location to store the error occurring, or NULL to
+ * @param error_r location to store the error occuring, or NULL to
  * ignore errors
  */
 bool

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #include "config.h"
 #include "input/rewind_input_plugin.h"
-#include "input_internal.h"
+#include "input/curl_input_plugin.h"
 #include "input_plugin.h"
 #include "tag.h"
 
@@ -107,23 +107,6 @@ input_rewind_close(struct input_stream *is)
 	g_free(r);
 }
 
-static bool
-input_rewind_check(struct input_stream *is, GError **error_r)
-{
-	struct input_rewind *r = (struct input_rewind *)is;
-
-	return input_stream_check(r->input, error_r);
-}
-
-static void
-input_rewind_update(struct input_stream *is)
-{
-	struct input_rewind *r = (struct input_rewind *)is;
-
-	if (!reading_from_buffer(r))
-		copy_attributes(r);
-}
-
 static struct tag *
 input_rewind_tag(struct input_stream *is)
 {
@@ -132,12 +115,16 @@ input_rewind_tag(struct input_stream *is)
 	return input_stream_tag(r->input);
 }
 
-static bool
-input_rewind_available(struct input_stream *is)
+static int
+input_rewind_buffer(struct input_stream *is, GError **error_r)
 {
 	struct input_rewind *r = (struct input_rewind *)is;
 
-	return input_stream_available(r->input);
+	int ret = input_stream_buffer(r->input, error_r);
+	if (ret < 0 || !reading_from_buffer(r))
+		copy_attributes(r);
+
+	return ret;
 }
 
 static size_t
@@ -225,10 +212,8 @@ input_rewind_seek(struct input_stream *is, goffset offset, int whence,
 
 static const struct input_plugin rewind_input_plugin = {
 	.close = input_rewind_close,
-	.check = input_rewind_check,
-	.update = input_rewind_update,
 	.tag = input_rewind_tag,
-	.available = input_rewind_available,
+	.buffer = input_rewind_buffer,
 	.read = input_rewind_read,
 	.eof = input_rewind_eof,
 	.seek = input_rewind_seek,
@@ -247,8 +232,7 @@ input_rewind_open(struct input_stream *is)
 		return is;
 
 	c = g_new(struct input_rewind, 1);
-	input_stream_init(&c->base, &rewind_input_plugin, is->uri,
-			  is->mutex, is->cond);
+	input_stream_init(&c->base, &rewind_input_plugin, is->uri);
 	c->tail = 0;
 	c->input = is;
 

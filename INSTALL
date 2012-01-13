@@ -84,6 +84,11 @@ For Ogg Vorbis support.  You will need libogg and libvorbis.
 FLAC - http://flac.sourceforge.net/
 For FLAC support.  You will need version 1.1.0 or higher of libflac.
 
+OggFLAC - http://www.xiph.org/ogg/vorbis/ and http://flac.sourceforge.net/
+For OggFLAC support.  You will need liboggflac, which can be built from the
+FLAC sources if libogg is already installed.  Versions of flac 1.1.3 and
+greater will automatically detect and use OggFLAC if it's available.
+
 Audio File - http://www.68k.org/~michael/audiofile/
 For WAVE, AIFF, and AU support.  You will need libaudiofile.
 
@@ -114,9 +119,6 @@ WAVE, AIFF, and many others.
 libwavpack - http://www.wavpack.com/
 For WavPack playback.
 
-despotify - https://github.com/SimonKagstrom/despotify
-For Spotify playback.
-
 
 Optional Miscellaneous Dependencies
 -----------------------------------
@@ -138,9 +140,6 @@ For the sticker database.
 
 libcue - http://libcue.sourceforge.net/
 For CUE sheet support.
-
-libcdio - http://www.gnu.org/software/libcdio/
-For playing audio CDs.
 
 
 pkg-config

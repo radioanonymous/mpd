@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -68,12 +68,11 @@ struct archive_plugin {
 	 * Opens an input_stream of a file within the archive.
 	 *
 	 * @param path the path within the archive
-	 * @param error_r location to store the error occurring, or
+	 * @param error_r location to store the error occuring, or
 	 * NULL to ignore errors
 	 */
 	struct input_stream *(*open_stream)(struct archive_file *af,
 					    const char *path,
-					    GMutex *mutex, GCond *cond,
 					    GError **error_r);
 
 	/**
@@ -102,8 +101,7 @@ char *
 archive_file_scan_next(struct archive_file *file);
 
 struct input_stream *
-archive_file_open_stream(struct archive_file *file, const char *path,
-			 GMutex *mutex, GCond *cond,
-			 GError **error_r);
+archive_file_open_stream(struct archive_file *file,
+			 const char *path, GError **error_r);
 
 #endif

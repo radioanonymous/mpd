@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,8 +19,6 @@
 
 #ifndef MPD_LOCATE_H
 #define MPD_LOCATE_H
-
-#include "gcc.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -51,6 +49,10 @@ struct locate_item_list {
 int
 locate_parse_type(const char *str);
 
+/* returns NULL if not a known type */
+struct locate_item *
+locate_item_new(const char *type_string, const char *needle);
+
 /**
  * Allocates a new struct locate_item_list, and initializes all
  * members with zero bytes.
@@ -59,7 +61,6 @@ struct locate_item_list *
 locate_item_list_new(unsigned length);
 
 /* return number of items or -1 on error */
-gcc_nonnull(1)
 struct locate_item_list *
 locate_item_list_parse(char *argv[], int argc);
 
@@ -67,24 +68,19 @@ locate_item_list_parse(char *argv[], int argc);
  * Duplicate the struct locate_item_list object and convert all
  * needles with g_utf8_casefold().
  */
-gcc_nonnull(1)
 struct locate_item_list *
 locate_item_list_casefold(const struct locate_item_list *list);
 
-gcc_nonnull(1)
 void
 locate_item_list_free(struct locate_item_list *list);
 
-gcc_nonnull(1)
 void
 locate_item_free(struct locate_item *item);
 
-gcc_nonnull(1,2)
 bool
 locate_song_search(const struct song *song,
 		   const struct locate_item_list *criteria);
 
-gcc_nonnull(1,2)
 bool
 locate_song_match(const struct song *song,
 		   const struct locate_item_list *criteria);

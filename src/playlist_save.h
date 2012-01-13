@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,15 +20,11 @@
 #ifndef MPD_PLAYLIST_SAVE_H
 #define MPD_PLAYLIST_SAVE_H
 
-#include "playlist_error.h"
+#include "playlist.h"
 
-#include <stdbool.h>
 #include <stdio.h>
 
 struct song;
-struct queue;
-struct playlist;
-struct player_control;
 
 void
 playlist_print_song(FILE *fp, const struct song *song);
@@ -52,8 +48,7 @@ spl_save_playlist(const char *name_utf8, const struct playlist *playlist);
  * Loads a stored playlist file, and append all songs to the global
  * playlist.
  */
-bool
-playlist_load_spl(struct playlist *playlist, struct player_control *pc,
-		  const char *name_utf8, GError **error_r);
+enum playlist_result
+playlist_load_spl(struct playlist *playlist, const char *name_utf8);
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,7 +25,6 @@
 #include "archive/zzip_archive_plugin.h"
 #include "archive_api.h"
 #include "archive_api.h"
-#include "input_internal.h"
 #include "input_plugin.h"
 #include "refcount.h"
 
@@ -135,17 +134,14 @@ struct zzip_input_stream {
 
 static struct input_stream *
 zzip_archive_open_stream(struct archive_file *file,
-			 const char *pathname,
-			 GMutex *mutex, GCond *cond,
-			 GError **error_r)
+			 const char *pathname, GError **error_r)
 {
 	struct zzip_archive *context = (struct zzip_archive *) file;
 	struct zzip_input_stream *zis;
 	ZZIP_STAT z_stat;
 
 	zis = g_new(struct zzip_input_stream, 1);
-	input_stream_init(&zis->base, &zzip_input_plugin, pathname,
-			  mutex, cond);
+	input_stream_init(&zis->base, &zzip_input_plugin, pathname);
 
 	zis->archive = context;
 	zis->file = zzip_file_open(context->dir, pathname, 0);

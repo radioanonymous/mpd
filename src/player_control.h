@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,9 +20,8 @@
 #ifndef MPD_PLAYER_H
 #define MPD_PLAYER_H
 
+#include "notify.h"
 #include "audio_format.h"
-
-#include <glib.h>
 
 #include <stdint.h>
 
@@ -117,28 +116,28 @@ struct player_control {
 	double total_play_time;
 };
 
-struct player_control *
-pc_new(unsigned buffer_chunks, unsigned buffered_before_play);
+extern struct player_control pc;
 
-void
-pc_free(struct player_control *pc);
+void pc_init(unsigned buffer_chunks, unsigned buffered_before_play);
+
+void pc_deinit(void);
 
 /**
  * Locks the #player_control object.
  */
 static inline void
-player_lock(struct player_control *pc)
+player_lock(void)
 {
-	g_mutex_lock(pc->mutex);
+	g_mutex_lock(pc.mutex);
 }
 
 /**
  * Unlocks the #player_control object.
  */
 static inline void
-player_unlock(struct player_control *pc)
+player_unlock(void)
 {
-	g_mutex_unlock(pc->mutex);
+	g_mutex_unlock(pc.mutex);
 }
 
 /**
@@ -147,9 +146,9 @@ player_unlock(struct player_control *pc)
  * to calling this function.
  */
 static inline void
-player_wait(struct player_control *pc)
+player_wait(void)
 {
-	g_cond_wait(pc->cond, pc->mutex);
+	g_cond_wait(pc.cond, pc.mutex);
 }
 
 /**
@@ -160,16 +159,16 @@ player_wait(struct player_control *pc)
  * Note the small difference to the player_wait() function!
  */
 void
-player_wait_decoder(struct player_control *pc, struct decoder_control *dc);
+player_wait_decoder(struct decoder_control *dc);
 
 /**
  * Signals the #player_control object.  The object should be locked
  * prior to calling this function.
  */
 static inline void
-player_signal(struct player_control *pc)
+player_signal(void)
 {
-	g_cond_signal(pc->cond);
+	g_cond_signal(pc.cond);
 }
 
 /**
@@ -177,11 +176,11 @@ player_signal(struct player_control *pc)
  * locked by this function.
  */
 static inline void
-player_lock_signal(struct player_control *pc)
+player_lock_signal(void)
 {
-	player_lock(pc);
-	player_signal(pc);
-	player_unlock(pc);
+	player_lock();
+	player_signal();
+	player_unlock();
 }
 
 /**
@@ -190,34 +189,33 @@ player_lock_signal(struct player_control *pc)
  * not point to an invalid pointer.
  */
 void
-pc_song_deleted(struct player_control *pc, const struct song *song);
+pc_song_deleted(const struct song *song);
 
 void
-pc_play(struct player_control *pc, struct song *song);
+pc_play(struct song *song);
 
 /**
  * see PLAYER_COMMAND_CANCEL
  */
-void
-pc_cancel(struct player_control *pc);
+void pc_cancel(void);
 
 void
-pc_set_pause(struct player_control *pc, bool pause_flag);
+pc_set_pause(bool pause_flag);
 
 void
-pc_pause(struct player_control *pc);
+pc_pause(void);
 
 void
-pc_kill(struct player_control *pc);
+pc_kill(void);
 
 void
-pc_get_status(struct player_control *pc, struct player_status *status);
+pc_get_status(struct player_status *status);
 
 enum player_state
-pc_get_state(struct player_control *pc);
+pc_get_state(void);
 
 void
-pc_clear_error(struct player_control *pc);
+pc_clear_error(void);
 
 /**
  * Returns the human-readable message describing the last error during
@@ -225,19 +223,19 @@ pc_clear_error(struct player_control *pc);
  * returned string.
  */
 char *
-pc_get_error_message(struct player_control *pc);
+pc_get_error_message(void);
 
 enum player_error
-pc_get_error(struct player_control *pc);
+pc_get_error(void);
 
 void
-pc_stop(struct player_control *pc);
+pc_stop(void);
 
 void
-pc_update_audio(struct player_control *pc);
+pc_update_audio(void);
 
 void
-pc_enqueue_song(struct player_control *pc, struct song *song);
+pc_enqueue_song(struct song *song);
 
 /**
  * Makes the player thread seek the specified song to a position.
@@ -246,27 +244,27 @@ pc_enqueue_song(struct player_control *pc, struct song *song);
  * playing currently)
  */
 bool
-pc_seek(struct player_control *pc, struct song *song, float seek_time);
+pc_seek(struct song *song, float seek_time);
 
 void
-pc_set_cross_fade(struct player_control *pc, float cross_fade_seconds);
+pc_set_cross_fade(float cross_fade_seconds);
 
 float
-pc_get_cross_fade(const struct player_control *pc);
+pc_get_cross_fade(void);
 
 void
-pc_set_mixramp_db(struct player_control *pc, float mixramp_db);
+pc_set_mixramp_db(float mixramp_db);
 
 float
-pc_get_mixramp_db(const struct player_control *pc);
+pc_get_mixramp_db(void);
 
 void
-pc_set_mixramp_delay(struct player_control *pc, float mixramp_delay_seconds);
+pc_set_mixramp_delay(float mixramp_delay_seconds);
 
 float
-pc_get_mixramp_delay(const struct player_control *pc);
+pc_get_mixramp_delay(void);
 
 double
-pc_get_total_play_time(const struct player_control *pc);
+pc_get_total_play_time(void);
 
 #endif

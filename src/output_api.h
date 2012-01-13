@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,6 @@
 #define MPD_OUTPUT_API_H
 
 #include "output_plugin.h"
-#include "output_internal.h"
 #include "audio_format.h"
 #include "tag.h"
 #include "conf.h"

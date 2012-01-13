@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,13 +29,16 @@ struct audio_output;
 struct audio_format;
 struct config_param;
 struct music_pipe;
-struct player_control;
 
 static inline GQuark
 audio_output_quark(void)
 {
 	return g_quark_from_static_string("audio_output");
 }
+
+bool
+audio_output_init(struct audio_output *ao, const struct config_param *param,
+		  GError **error_r);
 
 /**
  * Enables the device.

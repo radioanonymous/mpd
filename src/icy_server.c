@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -70,7 +70,7 @@ icy_server_metadata_string(const char *stream_title, const char* stream_url)
 
 	meta_length = strlen(icy_metadata);
 
-	meta_length--; // subtract placeholder
+	meta_length--; // substract placeholder
 
 	meta_length = ((int)meta_length / 16) + 1;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -68,14 +68,8 @@ static void * update_task(void *_path)
 
 	modified = update_walk(path, discard);
 
-	if (modified || !db_exists()) {
-		GError *error = NULL;
-		if (!db_save(&error)) {
-			g_warning("Failed to save database: %s",
-				  error->message);
-			g_error_free(error);
-		}
-	}
+	if (modified || !db_exists())
+		db_save();
 
 	if (path != NULL && *path != 0)
 		g_debug("finished: %s", path);

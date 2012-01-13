@@ -1,12 +1,11 @@
 AC_PREREQ(2.60)
-AC_INIT(mpd, 0.17~git, musicpd-dev-team@lists.sourceforge.net)
+AC_INIT(mpd, 0.16.5, musicpd-dev-team@lists.sourceforge.net)
 AC_CONFIG_SRCDIR([src/main.c])
-AM_INIT_AUTOMAKE([foreign 1.11 dist-bzip2 subdir-objects])
-AM_SILENT_RULES
-AC_CONFIG_HEADERS(config.h)
+AM_INIT_AUTOMAKE([foreign 1.10 dist-bzip2 subdir-objects])
+AM_CONFIG_HEADER(config.h)
 AC_CONFIG_MACRO_DIR([m4])
 
-AC_DEFINE(PROTOCOL_VERSION, "0.17.0", [The MPD protocol version])
+AC_DEFINE(PROTOCOL_VERSION, "0.16.0", [The MPD protocol version])
 
 
 dnl ---------------------------------------------------------------------------
@@ -30,7 +29,6 @@ if test x$CXX = xg++; then
 		HAVE_CXX=no
 	fi
 fi
-AM_CONDITIONAL(HAVE_CXX, test x$HAVE_CXX = xyes)
 
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
@@ -58,6 +56,11 @@ AC_SUBST(AM_CPPFLAGS,"")
 AC_SUBST(AM_CFLAGS,"")
 AC_SUBST(AM_CXXFLAGS,"")
 
+AC_SUBST(MPD_LIBS)
+AC_SUBST(MPD_CFLAGS)
+MPD_LIBS=""
+MPD_CFLAGS=""
+
 dnl ---------------------------------------------------------------------------
 dnl OS Specific Defaults
 dnl ---------------------------------------------------------------------------
@@ -65,8 +68,7 @@ AC_CANONICAL_HOST
 
 case "$host_os" in
 mingw32* | windows*)
-	AM_CPPFLAGS="$AM_CPPFLAGS -DWINVER=0x0501"
-	LIBS="$LIBS -lws2_32"
+	MPD_LIBS="$MPD_LIBS -lws2_32"
 	;;
 esac
 
@@ -109,18 +111,22 @@ fi
 dnl ---------------------------------------------------------------------------
 dnl Header/Library Checks
 dnl ---------------------------------------------------------------------------
-AC_CHECK_FUNCS(daemon fork)
+AC_CHECK_FUNCS(daemon fork syslog)
+if test $ac_cv_func_syslog = no; then
+	# syslog is not in the default libraries.  See if it's in some other.
+	for lib in bsd socket inet; do
+		AC_CHECK_LIB($lib, syslog,
+			[AC_DEFINE(HAVE_SYSLOG)
+			LIBS="$LIBS -l$lib"; break])
+	done
+fi
 
-AC_SEARCH_LIBS([syslog], [bsd socket inet],
-	[AC_DEFINE(HAVE_SYSLOG, 1, [Define if syslog() is available])])
-
-AC_SEARCH_LIBS([socket], [socket])
-AC_SEARCH_LIBS([gethostbyname], [nsl])
+AC_CHECK_LIB(socket,socket,MPD_LIBS="$MPD_LIBS -lsocket",)
+AC_CHECK_LIB(nsl,gethostbyname,MPD_LIBS="$MPD_LIBS -lnsl",)
 
 AC_CHECK_FUNCS(pipe2 accept4)
 
-AC_SEARCH_LIBS([exp], [m],,
-	[AC_MSG_ERROR([exp() not found])])
+AC_CHECK_LIB(m,exp,MPD_LIBS="$MPD_LIBS -lm",)
 
 AC_CHECK_HEADERS(locale.h)
 AC_CHECK_HEADERS(valgrind/memcheck.h)
@@ -131,11 +137,6 @@ dnl ---------------------------------------------------------------------------
 AC_ARG_ENABLE(alsa,
 	AS_HELP_STRING([--enable-alsa], [enable ALSA support]),,
 	[enable_alsa=auto])
-
-AC_ARG_ENABLE(roar,
-	AS_HELP_STRING([--enable-roar],
-		[enable support for RoarAudio]),,
-	[enable_roar=auto])
 
 AC_ARG_ENABLE(ao,
 	AS_HELP_STRING([--enable-ao],
@@ -152,11 +153,6 @@ AC_ARG_ENABLE(bzip2,
 		[enable bzip2 archive support (default: disabled)]),,
 	enable_bzip2=no)
 
-AC_ARG_ENABLE(cdio-paranoia,
-	AS_HELP_STRING([--enable-cdio-paranoia],
-		[enable support for audio CD support]),,
-	enable_cdio_paranoia=auto)
-
 AC_ARG_ENABLE(cue,
 	AS_HELP_STRING([--enable-cue],
 		[enable support for libcue support]),,
@@ -166,11 +162,6 @@ AC_ARG_ENABLE(curl,
 	AS_HELP_STRING([--enable-curl],
 		[enable support for libcurl HTTP streaming (default: auto)]),,
 	[enable_curl=auto])
-
-AC_ARG_ENABLE(soup,
-	AS_HELP_STRING([--enable-soup],
-		[enable support for libsoup HTTP streaming (default: auto)]),,
-	[enable_soup=auto])
 
 AC_ARG_ENABLE(debug,
 	AS_HELP_STRING([--enable-debug],
@@ -211,15 +202,15 @@ AC_ARG_ENABLE(gme,
 		[enable Blargg's game music emulator plugin]),,
 	enable_gme=auto)
 
+AC_ARG_ENABLE(gprof,
+	AS_HELP_STRING([--enable-gprof],
+		[enable profiling via gprof (default: disabled)]),,
+	enable_gprof=no)
+
 AC_ARG_ENABLE(httpd-output,
 	AS_HELP_STRING([--enable-httpd-output],
 		[enables the HTTP server output]),,
 	[enable_httpd_output=auto])
-
-AC_ARG_ENABLE(raop-output,
-	AS_HELP_STRING([--enable-raop-output],
-		[enables the RAOP output]),,
-	[enable_raop_output=auto])
 
 AC_ARG_ENABLE(id3,
 	AS_HELP_STRING([--enable-id3],
@@ -252,11 +243,6 @@ AC_ARG_ENABLE(lastfm,
 	AS_HELP_STRING([--enable-lastfm],
 		[enable support for last.fm radio (default: disable)]),,
 	[enable_lastfm=no])
-
-AC_ARG_ENABLE(despotify,
-	AS_HELP_STRING([--enable-despotify],
-		[enable support for despotify (default: disable)]),,
-	[enable_despotify=no])
 
 AC_ARG_ENABLE(lame-encoder,
 	AS_HELP_STRING([--enable-lame-encoder],
@@ -306,6 +292,11 @@ AC_ARG_ENABLE(mvp,
 	AS_HELP_STRING([--enable-mvp],
 		[enable support for Hauppauge Media MVP (default: disable)]),,
 	enable_mvp=no)
+
+AC_ARG_ENABLE(oggflac,
+	AS_HELP_STRING([--disable-oggflac],
+		[disable OggFLAC support (default: enable)]),,
+	enable_oggflac=yes)
 
 AC_ARG_ENABLE(openal,
 	AS_HELP_STRING([--enable-openal],
@@ -440,11 +431,6 @@ dnl ---------------------------------------------------------------------------
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.12 gthread-2.0],,
 		[AC_MSG_ERROR([GLib 2.12 is required])])
 
-if test x$GCC = xyes; then
-	# suppress warnings in the GLib headers
-	GLIB_CFLAGS=`echo $GLIB_CFLAGS |sed -e 's,-I/,-isystem /,g'`
-fi
-
 dnl ---------------------------------------------------------------------------
 dnl Protocol Options
 dnl ---------------------------------------------------------------------------
@@ -459,11 +445,7 @@ if test x$enable_ipv6 = xyes; then
 	AC_EGREP_CPP([AP_maGiC_VALUE],
 	[
 #include <sys/types.h>
-#ifdef WIN32
-#include <winsock2.h>
-#else
 #include <sys/socket.h>
-#endif
 #include <netdb.h>
 #ifdef PF_INET6
 #ifdef AF_INET6
@@ -593,7 +575,8 @@ if test x$with_zeroconf != xno; then
 	if test x$with_zeroconf = xbonjour || test x$with_zeroconf = xauto; then
 		AC_CHECK_HEADER(dns_sd.h,
 			[enable_bonjour=yes;AC_DEFINE([HAVE_BONJOUR], 1, [Define to enable Bonjour Zeroconf support])])
-		AC_CHECK_LIB([dns_sd], [DNSServiceRegister])
+		AC_CHECK_LIB(dns_sd, DNSServiceRegister,
+			MPD_LIBS="$MPD_LIBS -ldns_sd")
 	fi
 
 	if test x$enable_bonjour = xyes; then
@@ -660,14 +643,6 @@ if test x$enable_curl = xyes; then
 fi
 AM_CONDITIONAL(ENABLE_CURL, test x$enable_curl = xyes)
 
-dnl ----------------------------------- SOUP ----------------------------------
-MPD_AUTO_PKG(soup, SOUP, [libsoup-2.4],
-	[libsoup HTTP streaming], [libsoup not found])
-if test x$enable_soup = xyes; then
-	AC_DEFINE(ENABLE_SOUP, 1, [Define when libsoup is used for HTTP streaming])
-fi
-AM_CONDITIONAL(ENABLE_SOUP, test x$enable_soup = xyes)
-
 dnl --------------------------------- Last.FM ---------------------------------
 if test x$enable_lastfm = xyes; then
 	if test x$enable_curl != xyes; then
@@ -677,24 +652,6 @@ if test x$enable_lastfm = xyes; then
 	AC_DEFINE(ENABLE_LASTFM, 1, [Define when last.fm radio is enabled])
 fi
 AM_CONDITIONAL(ENABLE_LASTFM, test x$enable_lastfm = xyes)
-
-dnl --------------------------------- Despotify ---------------------------------
-MPD_AUTO_PKG(despotify, DESPOTIFY, [despotify],
-	[Despotify support], [despotify not found])
-if test x$enable_despotify = xyes; then
-	AC_DEFINE(ENABLE_DESPOTIFY, 1, [Define when despotify is enabled])
-fi
-AM_CONDITIONAL(ENABLE_DESPOTIFY, test x$enable_despotify = xyes)
-
-dnl ---------------------------------- libcue ---------------------------------
-MPD_AUTO_PKG(cdio_paranoia, CDIO_PARANOIA, [libcdio_paranoia],
-	[libcdio_paranoia audio CD library], [libcdio_paranoia not found])
-if test x$enable_cdio_paranoia = xyes; then
-	AC_DEFINE([ENABLE_CDIO_PARANOIA], 1,
-		[Define to enable libcdio_paranoia support])
-fi
-
-AM_CONDITIONAL(ENABLE_CDIO_PARANOIA, test x$enable_cdio_paranoia = xyes)
 
 dnl ---------------------------------- libmms ---------------------------------
 MPD_AUTO_PKG(mms, MMS, [libmms >= 0.4],
@@ -727,10 +684,9 @@ AM_CONDITIONAL(ENABLE_ISO9660_TEST, test x$MKISOFS != xno)
 dnl ---------------------------------- libbz2 ---------------------------------
 if test x$enable_bzip2 = xyes; then
 	AC_CHECK_LIB(bz2, BZ2_bzDecompressInit,
-		[BZ2_LIBS="-lbz2"],
+		[MPD_LIBS="$MPD_LIBS -lbz2"],
 		[AC_MSG_ERROR([libbz2 not found])])
 fi
-AC_SUBST(BZ2_LIBS)
 
 AM_CONDITIONAL(HAVE_BZ2, test x$enable_bzip2 = xyes)
 if test x$enable_bzip2 = xyes; then
@@ -790,8 +746,19 @@ AM_CONDITIONAL(HAVE_FAAD, test x$enable_aac = xyes)
 AM_CONDITIONAL(HAVE_MP4, test x$enable_mp4 = xyes)
 
 dnl ---------------------------------- ffmpeg ---------------------------------
-MPD_AUTO_PKG(ffmpeg, FFMPEG, [libavformat >= 52.31 libavcodec >= 52.20 libavutil >= 49.15],
+MPD_AUTO_PKG(ffmpeg, FFMPEG, [libavformat >= 52 libavcodec >= 51 libavutil >= 49],
 	[ffmpeg decoder library], [libavformat+libavcodec+libavutil not found])
+
+if test x$enable_ffmpeg = xyes; then
+	# prior to ffmpeg svn12865, you had to specify include files
+	# without path prefix
+	old_CPPCFLAGS=$CPPFLAGS
+	CPPFLAGS="$CPPFLAGS $FFMPEG_CFLAGS"
+	AC_CHECK_HEADER(libavcodec/avcodec.h,,
+		AC_DEFINE(OLD_FFMPEG_INCLUDES, 1,
+			[Define if avcodec.h instead of libavcodec/avcodec.h should be included]))
+	CPPCFLAGS=$old_CPPFLAGS
+fi
 
 if test x$enable_ffmpeg = xyes; then
 	AC_DEFINE(HAVE_FFMPEG, 1, [Define for FFMPEG support])
@@ -806,6 +773,25 @@ MPD_AUTO_PKG(flac, FLAC, [flac >= 1.1],
 
 if test x$enable_flac = xyes; then
 	AC_DEFINE(HAVE_FLAC, 1, [Define for FLAC support])
+
+	oldcflags="$CFLAGS"
+	oldlibs="$LIBS"
+	CFLAGS="$CFLAGS $FLAC_CFLAGS"
+	LIBS="$LIBS $FLAC_LIBS"
+	if test x$enable_flac = xyes && test x$enable_oggflac = xyes; then
+		AC_CHECK_DECL(FLAC_API_SUPPORTS_OGG_FLAC,
+			[enable_oggflac=flac], [],
+			[#include <FLAC/export.h>])
+	fi
+	CFLAGS="$oldcflags"
+	LIBS="$oldlibs"
+
+	if test x$enable_oggflac = xflac; then
+		PKG_CHECK_MODULES(OGG, [ogg],
+			[FLAC_LIBS="${FLAC_LIBS} ${OGG_LIBS}" FLAC_CFLAGS="${FLAC_CFLAGS} ${OGG_CFLAGS}"],
+			[enable_oggflac=yes;
+			AC_MSG_WARN("FLAC has the ogg API built in, but couldn't find ogg. Disabling oggflac.")])
+	fi
 fi
 
 AM_CONDITIONAL(HAVE_FLAC, test x$enable_flac = xyes)
@@ -891,32 +877,52 @@ AM_CONDITIONAL(ENABLE_SNDFILE, test x$enable_sndfile = xyes)
 
 dnl --------------------------------- musepack --------------------------------
 if test x$enable_mpc = xyes; then
+	if test "x$mpcdec_libraries" != "x" ; then
+		MPCDEC_LIBS="-L$mpcdec_libraries"
+	elif test "x$mpcdec_prefix" != "x" ; then
+		MPCDEC_LIBS="-L$mpcdec_prefix/lib"
+	fi
+
+	MPCDEC_LIBS="$MPCDEC_LIBS -lmpcdec"
+
+	if test "x$mpcdec_includes" != "x" ; then
+		MPCDEC_CFLAGS="-I$mpcdec_includes"
+	elif test "x$mpcdec_prefix" != "x" ; then
+		MPCDEC_CFLAGS="-I$mpcdec_prefix/include"
+	fi
+
 	oldcflags=$CFLAGS
 	oldlibs=$LIBS
 	oldcppflags=$CPPFLAGS
-	AC_CHECK_LIB(mpcdec,main,
-			MPCDEC_LIBS="$MPCDEC_LIBS -lmpcdec",
-			enable_mpc=no)
-	CFLAGS=$oldcflags
-	LIBS=$oldlibs
-	CPPFLAGS=$oldcppflags
-
+	CFLAGS="$CFLAGS $MPD_CFLAGS $MPCDEC_CFLAGS -I."
+	LIBS="$LIBS $MPD_LIBS $MPCDEC_LIBS"
+	CPPFLAGS=$CFLAGS
+	AC_CHECK_HEADER(mpc/mpcdec.h,
+		old_mpcdec=no,
+		[AC_CHECK_HEADER(mpcdec/mpcdec.h,
+			old_mpcdec=yes,
+			enable_mpc=no)])
 	if test x$enable_mpc = xyes; then
-		AC_CHECK_HEADER([mpc/mpcdec.h],
-			[AC_DEFINE(HAVE_MPCDEC,1,
-				[Define to use libmpcdec for MPC decoding])],
-			[AC_CHECK_HEADER(mpcdec/mpcdec.h,
-				[AC_DEFINE(MPC_IS_OLD_API, 1,
-				[Define if an old pre-SV8 libmpcdec is used])]
-				)]
-		)	
+		AC_CHECK_LIB(mpcdec,main,
+			[MPD_LIBS="$MPD_LIBS $MPCDEC_LIBS";
+			MPD_CFLAGS="$MPD_CFLAGS $MPCDEC_CFLAGS";],
+			enable_mpc=no)
+	fi
+	if test x$enable_mpc = xyes; then
+		AC_DEFINE(HAVE_MPCDEC,1,
+			[Define to use libmpcdec for MPC decoding])
+		if test x$old_mpcdec = xyes; then
+			AC_DEFINE(MPC_IS_OLD_API, 1,
+				[Define if an old pre-SV8 libmpcdec is used])
+		fi
 	else
 		AC_MSG_WARN([mpcdec lib needed for MPC support -- disabling MPC support])
 	fi
+	CFLAGS=$oldcflags
+	LIBS=$oldlibs
+	CPPFLAGS=$oldcppflags
 fi
 
-AC_SUBST(MPCDEC_LIBS)
-AC_SUBST(MPCDEC_CFLAGS)
 AM_CONDITIONAL(HAVE_MPCDEC, test x$enable_mpc = xyes)
 
 dnl -------------------------------- Ogg Tremor -------------------------------
@@ -961,6 +967,25 @@ fi
 AC_SUBST(TREMOR_CFLAGS)
 AC_SUBST(TREMOR_LIBS)
 
+dnl --------------------------------- OggFLAC ---------------------------------
+dnl OggFLAC must go after Ogg Tremor
+
+if test x$enable_tremor = xyes && test x$enable_oggflac = xyes; then
+	AC_MSG_WARN([disabling OggFLAC support because it is incompatible with tremor])
+		enable_oggflac=no
+fi
+
+if test x$enable_oggflac = xyes; then
+	AC_CHECK_HEADER([OggFLAC/stream_decoder.h],, enable_oggflac=no)
+fi
+
+if test x$enable_oggflac = xyes; then
+	AC_DEFINE(HAVE_OGGFLAC,1,[Define for OggFLAC support])
+	MPD_LIBS="$MPD_LIBS -lOggFLAC -lFLAC -lm"
+fi
+
+AM_CONDITIONAL(HAVE_OGGFLAC, test x$enable_oggflac = xyes)
+
 dnl -------------------------------- Ogg Vorbis -------------------------------
 
 if test x$enable_tremor = xyes; then
@@ -985,18 +1010,19 @@ MPD_AUTO_PRE(sidplay, [sidplay decoder plugin], [No C++ compiler found])
 if test x$enable_sidplay != xno; then
 	# we're not using pkg-config here
 	# because libsidplay2's .pc file requires libtool
-	AC_CHECK_LIB([sidplay2],[main],[found_sidplay=yes],[found_sidplay=no],[])
-
+	AC_HAVE_LIBRARY(sidplay2, [found_sidplay=yes], [found_sidplay=no])
 	MPD_AUTO_PRE(sidplay, [sidplay decoder plugin],
 		[libsidplay2 not found])
 fi
 
 if test x$enable_sidplay != xno; then
-	AC_CHECK_LIB([resid-builder], [main],
+	# can't use AC_HAVE_LIBRARY here, because the dash in the
+	# library name triggers an autoconf bug
+	AC_CHECK_LIB(resid-builder, main,
 		[found_sidplay=yes], [found_sidplay=no])
 
 	if test x$found_sidplay = xyes; then
-		AC_CHECK_LIB([sidutils],[main],[],[found_sidplay=no],[])
+		AC_HAVE_LIBRARY(sidutils,, [found_sidplay=no])
 	fi
 
 	MPD_AUTO_RESULT(sidplay, [sidplay decoder plugin],
@@ -1059,6 +1085,7 @@ if
 	test x$enable_mp4 = xno &&
 	test x$enable_mpc = xno &&
 	test x$enable_mpg123 = xno &&
+	test x$enable_oggflac = xno &&
 	test x$enable_sidplay = xno &&
 	test x$enable_tremor = xno &&
 	test x$enable_vorbis = xno &&
@@ -1069,10 +1096,10 @@ if
 fi
 
 AM_CONDITIONAL(HAVE_OGG_COMMON,
-	test x$enable_vorbis = xyes || test x$enable_tremor = xyes || test x$enable_flac = xyes)
+	test x$enable_vorbis = xyes || test x$enable_tremor = xyes || test x$enable_oggflac = xyes || test x$enable_flac = xyes)
 
 AM_CONDITIONAL(HAVE_FLAC_COMMON,
-	  test x$enable_flac = xyes)
+	  test x$enable_flac = xyes || test x$enable_oggflac = xyes)
 
 dnl ---------------------------------------------------------------------------
 dnl Encoders for Streaming Audio Output Plugins
@@ -1195,16 +1222,6 @@ fi
 
 AM_CONDITIONAL(HAVE_ALSA, test x$enable_alsa = xyes)
 
-dnl ----------------------------------- ROAR ----------------------------------
-MPD_AUTO_PKG(roar, ROAR, [libroar >= 0.4.0],
-	[ROAR output plugin], [libroar not found])
-
-if test x$enable_roar = xyes; then
-	AC_DEFINE(HAVE_ROAR, 1, [Define to enable ROAR support])
-fi
-
-AM_CONDITIONAL(HAVE_ROAR, test x$enable_roar = xyes)
-
 dnl ----------------------------------- FFADO ---------------------------------
 
 MPD_AUTO_PKG(ffado, FFADO, [libffado],
@@ -1315,7 +1332,7 @@ enable_osx=no
 case "$host_os" in
 	darwin*)
 		AC_DEFINE(HAVE_OSX, 1, [Define for compiling OS X support])
-		LIBS="$LIBS -framework AudioUnit -framework CoreAudio -framework CoreServices"
+		MPD_LIBS="$MPD_LIBS -framework AudioUnit -framework CoreServices"
 		enable_osx=yes ;;
 esac
 
@@ -1392,24 +1409,13 @@ fi
 
 AM_CONDITIONAL(ENABLE_SOLARIS_OUTPUT, test x$enable_solaris_output = xyes)
 
-dnl --------------------------------- RAOP ------------------------------------
-
-MPD_AUTO_PKG(raop_output, OPENSSL, [openssl],
-	[RAOP output], [OpenSSL not found])
-
-if test x$enable_raop_output = xyes; then
-	AC_DEFINE(ENABLE_RAOP_OUTPUT, 1, [Define for compiling RAOP support])
-fi
-
-AM_CONDITIONAL(ENABLE_RAOP_OUTPUT, test x$enable_raop_output = xyes)
-
 dnl --------------------------------- WinMM ---------------------------------
 
 case "$host_os" in
 	mingw32* | windows*)
 		AC_DEFINE(ENABLE_WINMM_OUTPUT, 1, [Define to enable WinMM support])
 		enable_winmm_output=yes
-		LIBS="$LIBS -lwinmm"
+		MPD_LIBS="$MPD_LIBS -lwinmm"
 		;;
 
 	*)
@@ -1422,7 +1428,6 @@ AM_CONDITIONAL(ENABLE_WINMM_OUTPUT, test x$enable_winmm_output = xyes)
 dnl --------------------- Post Audio Output Plugins Tests ---------------------
 if
 	test x$enable_alsa = xno &&
-	test x$enable_roar = xno &&
 	test x$enable_ao = xno &&
 	test x$enable_ffado = xno &&
 	test x$enable_fifo = xno &&
@@ -1432,7 +1437,6 @@ if
 	test x$enable_openal = xno &&
 	test x$enable_oss = xno &&
 	test x$enable_osx = xno &&
-	test x$enable_raop_output = xno &&
 	test x$enable_pipe_output = xno &&
 	test x$enable_pulse = xno &&
 	test x$enable_recorder_output = xno &&
@@ -1482,6 +1486,7 @@ if test x$GCC = xyes
 then
 	MPD_CHECK_FLAG([-Wall])
 	MPD_CHECK_FLAG([-Wextra])
+	MPD_CHECK_FLAG([-Wno-deprecated-declarations])
 	MPD_CHECK_FLAG([-Wmissing-prototypes])
 	MPD_CHECK_FLAG([-Wshadow])
 	MPD_CHECK_FLAG([-Wpointer-arith])
@@ -1489,6 +1494,12 @@ then
 	MPD_CHECK_FLAG([-Wcast-qual])
 	MPD_CHECK_FLAG([-Wwrite-strings])
 	MPD_CHECK_FLAG([-pedantic])
+fi
+
+dnl ------------------------------ gprof profiler -----------------------------
+if test "x$enable_gprof" = xyes; then
+	MPD_CFLAGS="$MPD_CFLAGS -pg"
+	MPD_LIBS="$MPD_LIBS -pg"
 fi
 
 dnl ---------------------------- warnings as errors ---------------------------
@@ -1534,6 +1545,7 @@ results(mad, [MAD])
 results(mpg123, [MPG123])
 results(mp4, [MP4])
 results(mpc, [Musepack])
+results(oggflac, [OggFLAC], flac)
 printf '\n\t'
 results(tremor, [OggTremor])
 results(vorbis, [OggVorbis])
@@ -1557,18 +1569,16 @@ results(fifo,FIFO)
 results(recorder_output,[File Recorder])
 results(httpd_output,[HTTP Daemon])
 results(jack,[JACK])
-printf '\n\t'
 results(ao,[libao])
-results(mvp, [Media MVP])
 results(oss,[OSS])
+printf '\n\t'
 results(openal,[OpenAL])
 results(osx, [OS X])
 results(pipe_output, [Pipeline])
-printf '\n\t'
 results(pulse, [PulseAudio])
-results(raop_output, [RAOP])
-results(roar,[ROAR])
+results(mvp, [Media MVP])
 results(shout, [SHOUTcast])
+printf '\n\t'
 results(solaris_output, [Solaris])
 results(winmm_output, [WinMM])
 
@@ -1585,12 +1595,9 @@ if
 fi
 
 printf '\nStreaming support:\n\t'
-results(cdio_paranoia, [CDIO_PARANOIA])
 results(curl,[CURL])
-results(despotify,[Despotify])
 results(lastfm,[Last.FM])
 results(mms,[MMS])
-results(soup, [SOUP])
 
 printf '\n\n##########################################\n\n'
 
@@ -1599,9 +1606,7 @@ echo 'Generating files needed for compilation'
 dnl ---------------------------------------------------------------------------
 dnl Generate files
 dnl ---------------------------------------------------------------------------
-AC_CONFIG_FILES(Makefile)
-AC_CONFIG_FILES(doc/doxygen.conf)
-AC_CONFIG_FILES(mpd.service)
-AC_OUTPUT
+AC_OUTPUT(Makefile)
+AC_OUTPUT(mpd.service)
 
 echo 'MPD is ready for compilation, type "make" to begin.'

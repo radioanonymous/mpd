@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,5 +23,13 @@
 struct input_stream;
 
 extern const struct input_plugin input_plugin_curl;
+
+/**
+ * This is a workaround for an input_stream API deficiency; after
+ * exchanging the input_stream pointer in input_rewind_open(), this
+ * function is called to reinitialize CURL's data pointers.
+ */
+void
+input_curl_reinit(struct input_stream *is);
 
 #endif

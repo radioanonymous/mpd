@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,6 @@
 #include "config.h"
 #include "archive/iso9660_archive_plugin.h"
 #include "archive_api.h"
-#include "input_internal.h"
 #include "input_plugin.h"
 #include "refcount.h"
 
@@ -173,17 +172,15 @@ struct iso9660_input_stream {
 };
 
 static struct input_stream *
-iso9660_archive_open_stream(struct archive_file *file, const char *pathname,
-			    GMutex *mutex, GCond *cond,
-			    GError **error_r)
+iso9660_archive_open_stream(struct archive_file *file,
+		const char *pathname, GError **error_r)
 {
 	struct iso9660_archive_file *context =
 		(struct iso9660_archive_file *)file;
 	struct iso9660_input_stream *iis;
 
 	iis = g_new(struct iso9660_input_stream, 1);
-	input_stream_init(&iis->base, &iso9660_input_plugin, pathname,
-			  mutex, cond);
+	input_stream_init(&iis->base, &iso9660_input_plugin, pathname);
 
 	iis->archive = context;
 	iis->statbuf = iso9660_ifs_stat_translate(context->iso, pathname);

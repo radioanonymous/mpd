@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -79,7 +79,7 @@ static void version(void)
 	puts(PACKAGE " (MPD: Music Player Daemon) " VERSION " \n"
 	     "\n"
 	     "Copyright (C) 2003-2007 Warren Dukes <warren.dukes@gmail.com>\n"
-	     "Copyright (C) 2008-2011 Max Kellermann <max@duempel.org>\n"
+	     "Copyright (C) 2008-2010 Max Kellermann <max@duempel.org>\n"
 	     "This is free software; see the source for copying conditions.  There is NO\n"
 	     "warranty; not even MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n"
 	     "\n"
@@ -194,6 +194,8 @@ parse_cmdline(int argc, char **argv, struct options *options,
 				if(g_file_test(system_path,
 						G_FILE_TEST_IS_REGULAR)) {
 					ret = config_read_file(system_path,error_r);
+					g_free(system_path);
+					g_free(&system_config_dirs);
 					break;
 				}
 				++i;;

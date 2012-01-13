@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,6 @@
 #include "config.h"
 #include "archive/bz2_archive_plugin.h"
 #include "archive_api.h"
-#include "input_internal.h"
 #include "input_plugin.h"
 #include "refcount.h"
 
@@ -114,11 +113,7 @@ bz2_open(const char *pathname, GError **error_r)
 	refcount_init(&context->ref);
 
 	//open archive
-	static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
-	context->istream = input_stream_open(pathname,
-					     g_static_mutex_get_mutex(&mutex),
-					     NULL,
-					     error_r);
+	context->istream = input_stream_open(pathname, error_r);
 	if (context->istream == NULL) {
 		g_free(context);
 		return NULL;
@@ -173,15 +168,12 @@ bz2_close(struct archive_file *file)
 /* single archive handling */
 
 static struct input_stream *
-bz2_open_stream(struct archive_file *file, const char *path,
-		GMutex *mutex, GCond *cond,
-		GError **error_r)
+bz2_open_stream(struct archive_file *file, const char *path, GError **error_r)
 {
 	struct bz2_archive_file *context = (struct bz2_archive_file *) file;
 	struct bz2_input_stream *bis = g_new(struct bz2_input_stream, 1);
 
-	input_stream_init(&bis->base, &bz2_inputplugin, path,
-			  mutex, cond);
+	input_stream_init(&bis->base, &bz2_inputplugin, path);
 
 	bis->archive = context;
 

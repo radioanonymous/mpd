@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -231,8 +231,7 @@ rss_open_stream(struct input_stream *is)
 					     &parser, rss_parser_destroy);
 
 	while (true) {
-		nbytes = input_stream_lock_read(is, buffer, sizeof(buffer),
-						&error);
+		nbytes = input_stream_read(is, buffer, sizeof(buffer), &error);
 		if (nbytes == 0) {
 			if (error != NULL) {
 				g_markup_parse_context_free(context);

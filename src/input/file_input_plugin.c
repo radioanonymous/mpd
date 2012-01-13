@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 
 #include "config.h" /* must be first for large file support */
 #include "input/file_input_plugin.h"
-#include "input_internal.h"
 #include "input_plugin.h"
 #include "fd_util.h"
 #include "open.h"
@@ -46,16 +45,14 @@ file_quark(void)
 }
 
 static struct input_stream *
-input_file_open(const char *filename,
-		GMutex *mutex, GCond *cond,
-		GError **error_r)
+input_file_open(const char *filename, GError **error_r)
 {
 	int fd, ret;
 	struct stat st;
 	struct file_input_stream *fis;
 
 	if (!g_path_is_absolute(filename))
-		return NULL;
+		return false;
 
 	fd = open_cloexec(filename, O_RDONLY|O_BINARY, 0);
 	if (fd < 0) {
@@ -63,7 +60,7 @@ input_file_open(const char *filename,
 			g_set_error(error_r, file_quark(), errno,
 				    "Failed to open \"%s\": %s",
 				    filename, g_strerror(errno));
-		return NULL;
+		return false;
 	}
 
 	ret = fstat(fd, &st);
@@ -72,14 +69,14 @@ input_file_open(const char *filename,
 			    "Failed to stat \"%s\": %s",
 			    filename, g_strerror(errno));
 		close(fd);
-		return NULL;
+		return false;
 	}
 
 	if (!S_ISREG(st.st_mode)) {
 		g_set_error(error_r, file_quark(), 0,
 			    "Not a regular file: %s", filename);
 		close(fd);
-		return NULL;
+		return false;
 	}
 
 #ifdef POSIX_FADV_SEQUENTIAL
@@ -87,8 +84,7 @@ input_file_open(const char *filename,
 #endif
 
 	fis = g_new(struct file_input_stream, 1);
-	input_stream_init(&fis->base, &input_plugin_file, filename,
-			  mutex, cond);
+	input_stream_init(&fis->base, &input_plugin_file, filename);
 
 	fis->base.size = st.st_size;
 	fis->base.seekable = true;

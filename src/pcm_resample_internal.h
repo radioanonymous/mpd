@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -32,26 +32,12 @@
 
 #ifdef HAVE_LIBSAMPLERATE
 
-bool
-pcm_resample_lsr_global_init(const char *converter, GError **error_r);
-
-void
-pcm_resample_lsr_init(struct pcm_resample_state *state);
-
 void
 pcm_resample_lsr_deinit(struct pcm_resample_state *state);
 
-const float *
-pcm_resample_lsr_float(struct pcm_resample_state *state,
-		       unsigned channels,
-		       unsigned src_rate,
-		       const float *src_buffer, size_t src_size,
-		       unsigned dest_rate, size_t *dest_size_r,
-		       GError **error_r);
-
 const int16_t *
 pcm_resample_lsr_16(struct pcm_resample_state *state,
-		    unsigned channels,
+		    uint8_t channels,
 		    unsigned src_rate,
 		    const int16_t *src_buffer, size_t src_size,
 		    unsigned dest_rate, size_t *dest_size_r,
@@ -59,7 +45,7 @@ pcm_resample_lsr_16(struct pcm_resample_state *state,
 
 const int32_t *
 pcm_resample_lsr_32(struct pcm_resample_state *state,
-		    unsigned channels,
+		    uint8_t channels,
 		    unsigned src_rate,
 		    const int32_t *src_buffer,
 		    G_GNUC_UNUSED size_t src_size,
@@ -69,14 +55,11 @@ pcm_resample_lsr_32(struct pcm_resample_state *state,
 #endif
 
 void
-pcm_resample_fallback_init(struct pcm_resample_state *state);
-
-void
 pcm_resample_fallback_deinit(struct pcm_resample_state *state);
 
 const int16_t *
 pcm_resample_fallback_16(struct pcm_resample_state *state,
-			 unsigned channels,
+			 uint8_t channels,
 			 unsigned src_rate,
 			 const int16_t *src_buffer, size_t src_size,
 			 unsigned dest_rate,
@@ -84,7 +67,7 @@ pcm_resample_fallback_16(struct pcm_resample_state *state,
 
 const int32_t *
 pcm_resample_fallback_32(struct pcm_resample_state *state,
-			 unsigned channels,
+			 uint8_t channels,
 			 unsigned src_rate,
 			 const int32_t *src_buffer,
 			 G_GNUC_UNUSED size_t src_size,

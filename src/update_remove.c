@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,10 +19,10 @@
 
 #include "config.h" /* must be first for large file support */
 #include "update_internal.h"
+#include "notify.h"
 #include "event_pipe.h"
 #include "song.h"
 #include "playlist.h"
-#include "main.h"
 
 #ifdef ENABLE_SQLITE
 #include "sticker.h"
@@ -35,8 +35,7 @@
 
 static const struct song *removed_song;
 
-static GMutex *remove_mutex;
-static GCond *remove_cond;
+static struct notify remove_notify;
 
 /**
  * Safely remove a song from the database.  This must be done in the
@@ -59,20 +58,16 @@ song_remove_event(void)
 		sticker_song_delete(removed_song);
 #endif
 
-	playlist_delete_song(&g_playlist, global_player_control, removed_song);
-
-	/* clear "removed_song" and send signal to update thread */
-	g_mutex_lock(remove_mutex);
+	playlist_delete_song(&g_playlist, removed_song);
 	removed_song = NULL;
-	g_cond_signal(remove_cond);
-	g_mutex_unlock(remove_mutex);
+
+	notify_signal(&remove_notify);
 }
 
 void
 update_remove_global_init(void)
 {
-	remove_mutex = g_mutex_new();
-	remove_cond = g_cond_new();
+	notify_init(&remove_notify);
 
 	event_pipe_register(PIPE_EVENT_DELETE, song_remove_event);
 }
@@ -80,8 +75,7 @@ update_remove_global_init(void)
 void
 update_remove_global_finish(void)
 {
-	g_mutex_free(remove_mutex);
-	g_cond_free(remove_cond);
+	notify_deinit(&remove_notify);
 }
 
 void
@@ -93,10 +87,8 @@ update_remove_song(const struct song *song)
 
 	event_pipe_emit(PIPE_EVENT_DELETE);
 
-	g_mutex_lock(remove_mutex);
+	do {
+		notify_wait(&remove_notify);
+	} while (removed_song != NULL);
 
-	while (removed_song != NULL)
-		g_cond_wait(remove_cond, remove_mutex);
-
-	g_mutex_unlock(remove_mutex);
 }

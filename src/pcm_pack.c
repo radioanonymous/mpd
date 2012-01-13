@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -35,19 +35,19 @@ pack_sample(uint8_t *dest, const int32_t *src0, bool reverse_endian)
 }
 
 void
-pcm_pack_24(uint8_t *dest, const int32_t *src, const int32_t *src_end,
+pcm_pack_24(uint8_t *dest, const int32_t *src, unsigned num_samples,
 	    bool reverse_endian)
 {
 	/* duplicate loop to help the compiler's optimizer (constant
 	   parameter to the pack_sample() inline function) */
 
 	if (G_LIKELY(!reverse_endian)) {
-		while (src < src_end) {
+		while (num_samples-- > 0) {
 			pack_sample(dest, src++, false);
 			dest += 3;
 		}
 	} else {
-		while (src < src_end) {
+		while (num_samples-- > 0) {
 			pack_sample(dest, src++, true);
 			dest += 3;
 		}
@@ -73,19 +73,19 @@ unpack_sample(int32_t *dest0, const uint8_t *src, bool reverse_endian)
 }
 
 void
-pcm_unpack_24(int32_t *dest, const uint8_t *src, const uint8_t *src_end,
+pcm_unpack_24(int32_t *dest, const uint8_t *src, unsigned num_samples,
 	      bool reverse_endian)
 {
 	/* duplicate loop to help the compiler's optimizer (constant
 	   parameter to the unpack_sample() inline function) */
 
 	if (G_LIKELY(!reverse_endian)) {
-		while (src < src_end) {
+		while (num_samples-- > 0) {
 			unpack_sample(dest++, src, false);
 			src += 3;
 		}
 	} else {
-		while (src < src_end) {
+		while (num_samples-- > 0) {
 			unpack_sample(dest++, src, true);
 			src += 3;
 		}
