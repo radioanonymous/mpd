@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -50,7 +50,7 @@ audio_output_enable_index(unsigned idx)
 	ao->enabled = true;
 	idle_add(IDLE_OUTPUT);
 
-	pc_update_audio(ao->player_control);
+	pc_update_audio();
 
 	++audio_output_state_version;
 
@@ -79,7 +79,7 @@ audio_output_disable_index(unsigned idx)
 		idle_add(IDLE_MIXER);
 	}
 
-	pc_update_audio(ao->player_control);
+	pc_update_audio();
 
 	++audio_output_state_version;
 

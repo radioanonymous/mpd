@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -37,9 +37,9 @@ static uint64_t now(void)
 	return ((uint64_t)tv.tv_sec * 1000000) + tv.tv_usec;
 }
 
-struct timer *timer_new(const struct audio_format *af)
+Timer *timer_new(const struct audio_format *af)
 {
-	struct timer *timer = g_new(struct timer, 1);
+	Timer *timer = g_new(Timer, 1);
 	timer->time = 0;
 	timer->started = 0;
 	timer->rate = af->sample_rate * audio_format_frame_size(af);
@@ -47,24 +47,24 @@ struct timer *timer_new(const struct audio_format *af)
 	return timer;
 }
 
-void timer_free(struct timer *timer)
+void timer_free(Timer *timer)
 {
 	g_free(timer);
 }
 
-void timer_start(struct timer *timer)
+void timer_start(Timer *timer)
 {
 	timer->time = now();
 	timer->started = 1;
 }
 
-void timer_reset(struct timer *timer)
+void timer_reset(Timer *timer)
 {
 	timer->time = 0;
 	timer->started = 0;
 }
 
-void timer_add(struct timer *timer, int size)
+void timer_add(Timer *timer, int size)
 {
 	assert(timer->started);
 
@@ -72,7 +72,7 @@ void timer_add(struct timer *timer, int size)
 }
 
 unsigned
-timer_delay(const struct timer *timer)
+timer_delay(const Timer *timer)
 {
 	int64_t delay = (int64_t)(timer->time - now()) / 1000;
 	if (delay < 0)
@@ -81,10 +81,10 @@ timer_delay(const struct timer *timer)
 	if (delay > G_MAXINT)
 		delay = G_MAXINT;
 
-	return delay;
+	return delay / 1000;
 }
 
-void timer_sync(struct timer *timer)
+void timer_sync(Timer *timer)
 {
 	int64_t sleep_duration;
 

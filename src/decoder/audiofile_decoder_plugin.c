@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -54,7 +54,7 @@ audiofile_file_read(AFvirtualfile *vfile, void *data, size_t length)
 	GError *error = NULL;
 	size_t nbytes;
 
-	nbytes = input_stream_lock_read(is, data, length, &error);
+	nbytes = input_stream_read(is, data, length, &error);
 	if (nbytes == 0 && error != NULL) {
 		g_warning("%s", error->message);
 		g_error_free(error);
@@ -91,7 +91,7 @@ audiofile_file_seek(AFvirtualfile *vfile, long offset, int is_relative)
 {
 	struct input_stream *is = (struct input_stream *) vfile->closure;
 	int whence = (is_relative ? SEEK_CUR : SEEK_SET);
-	if (input_stream_lock_seek(is, offset, whence, NULL)) {
+	if (input_stream_seek(is, offset, whence, NULL)) {
 		return is->offset;
 	} else {
 		return -1;

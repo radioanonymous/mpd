@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,14 +18,12 @@
  */
 
 #include "config.h"
-#include "io_thread.h"
 #include "decoder_list.h"
 #include "decoder_api.h"
 #include "input_init.h"
 #include "input_stream.h"
 #include "audio_format.h"
 #include "pcm_volume.h"
-#include "tag_pool.h"
 #include "tag_ape.h"
 #include "tag_id3.h"
 #include "idle.h"
@@ -34,7 +32,6 @@
 
 #include <assert.h>
 #include <unistd.h>
-#include <stdlib.h>
 
 #ifdef HAVE_LOCALE_H
 #include <locale.h>
@@ -52,8 +49,8 @@ idle_add(G_GNUC_UNUSED unsigned flags)
  * No-op dummy.
  */
 bool
-pcm_volume(G_GNUC_UNUSED void *buffer, G_GNUC_UNUSED size_t length,
-	   G_GNUC_UNUSED enum sample_format format,
+pcm_volume(G_GNUC_UNUSED void *buffer, G_GNUC_UNUSED int length,
+	   G_GNUC_UNUSED const struct audio_format *format,
 	   G_GNUC_UNUSED int volume)
 {
 	return true;
@@ -91,7 +88,7 @@ decoder_read(G_GNUC_UNUSED struct decoder *decoder,
 	     struct input_stream *is,
 	     void *buffer, size_t length)
 {
-	return input_stream_lock_read(is, buffer, length, NULL);
+	return input_stream_read(is, buffer, length, NULL);
 }
 
 void
@@ -167,16 +164,6 @@ int main(int argc, char **argv)
 	decoder_name = argv[1];
 	path = argv[2];
 
-	g_thread_init(NULL);
-	io_thread_init();
-	if (!io_thread_start(&error)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-		return EXIT_FAILURE;
-	}
-
-	tag_pool_init();
-
 	if (!input_stream_global_init(&error)) {
 		g_warning("%s", error->message);
 		g_error_free(error);
@@ -193,11 +180,7 @@ int main(int argc, char **argv)
 
 	tag = decoder_plugin_tag_dup(plugin, path);
 	if (tag == NULL && plugin->stream_tag != NULL) {
-		GMutex *mutex = g_mutex_new();
-		GCond *cond = g_cond_new();
-
-		struct input_stream *is =
-			input_stream_open(path, mutex, cond, &error);
+		struct input_stream *is = input_stream_open(path, &error);
 
 		if (is == NULL) {
 			g_printerr("Failed to open %s: %s\n",
@@ -208,15 +191,10 @@ int main(int argc, char **argv)
 
 		tag = decoder_plugin_stream_tag(plugin, is);
 		input_stream_close(is);
-
-		g_cond_free(cond);
-		g_mutex_free(mutex);
 	}
 
 	decoder_plugin_deinit_all();
 	input_stream_global_finish();
-	io_thread_deinit();
-
 	if (tag == NULL) {
 		g_printerr("Failed to read tags\n");
 		return 1;
@@ -236,8 +214,6 @@ int main(int argc, char **argv)
 			tag_free(tag);
 		}
 	}
-
-	tag_pool_deinit();
 
 	return 0;
 }

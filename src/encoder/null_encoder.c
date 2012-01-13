@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,8 +20,7 @@
 #include "config.h"
 #include "encoder_api.h"
 #include "encoder_plugin.h"
-#include "fifo_buffer.h"
-#include "growing_fifo.h"
+#include "pcm_buffer.h"
 
 #include <assert.h>
 #include <string.h>
@@ -29,7 +28,8 @@
 struct null_encoder {
 	struct encoder encoder;
 
-	struct fifo_buffer *buffer;
+	struct pcm_buffer buffer;
+	size_t buffer_length;
 };
 
 extern const struct encoder_plugin null_encoder_plugin;
@@ -65,7 +65,7 @@ null_encoder_close(struct encoder *_encoder)
 {
 	struct null_encoder *encoder = (struct null_encoder *)_encoder;
 
-	fifo_buffer_free(encoder->buffer);
+	pcm_buffer_deinit(&encoder->buffer);
 }
 
 
@@ -76,7 +76,9 @@ null_encoder_open(struct encoder *_encoder,
 {
 	struct null_encoder *encoder = (struct null_encoder *)_encoder;
 
-	encoder->buffer = growing_fifo_new();
+	encoder->buffer_length = 0;
+	pcm_buffer_init(&encoder->buffer);
+
 	return true;
 }
 
@@ -86,26 +88,28 @@ null_encoder_write(struct encoder *_encoder,
 		   G_GNUC_UNUSED GError **error)
 {
 	struct null_encoder *encoder = (struct null_encoder *)_encoder;
+	char *buffer = pcm_buffer_get(&encoder->buffer, encoder->buffer_length + length);
 
-	growing_fifo_append(&encoder->buffer, data, length);
-	return length;
+	memcpy(buffer+encoder->buffer_length, data, length);
+
+	encoder->buffer_length += length;
+	return true;
 }
 
 static size_t
 null_encoder_read(struct encoder *_encoder, void *dest, size_t length)
 {
 	struct null_encoder *encoder = (struct null_encoder *)_encoder;
+	char *buffer = pcm_buffer_get(&encoder->buffer, encoder->buffer_length);
 
-	size_t max_length;
-	const void *src = fifo_buffer_read(encoder->buffer, &max_length);
-	if (src == NULL)
-		return 0;
+	if (length > encoder->buffer_length)
+		length = encoder->buffer_length;
 
-	if (length > max_length)
-		length = max_length;
+	memcpy(dest, buffer, length);
 
-	memcpy(dest, src, length);
-	fifo_buffer_consume(encoder->buffer, length);
+	encoder->buffer_length -= length;
+	memmove(buffer, buffer + length, encoder->buffer_length);
+
 	return length;
 }
 

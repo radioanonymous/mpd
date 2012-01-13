@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -81,14 +81,12 @@ archive_file_scan_next(struct archive_file *file)
 }
 
 struct input_stream *
-archive_file_open_stream(struct archive_file *file, const char *path,
-			 GMutex *mutex, GCond *cond,
-			 GError **error_r)
+archive_file_open_stream(struct archive_file *file,
+			 const char *path, GError **error_r)
 {
 	assert(file != NULL);
 	assert(file->plugin != NULL);
 	assert(file->plugin->open_stream != NULL);
 
-	return file->plugin->open_stream(file, path, mutex, cond,
-					 error_r);
+	return file->plugin->open_stream(file, path, error_r);
 }

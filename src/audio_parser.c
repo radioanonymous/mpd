@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -77,12 +77,6 @@ parse_sample_format(const char *src, bool mask,
 
 	if (mask && *src == '*') {
 		*sample_format_r = SAMPLE_FORMAT_UNDEFINED;
-		*endptr_r = src + 1;
-		return true;
-	}
-
-	if (*src == 'f') {
-		*sample_format_r = SAMPLE_FORMAT_FLOAT;
 		*endptr_r = src + 1;
 		return true;
 	}

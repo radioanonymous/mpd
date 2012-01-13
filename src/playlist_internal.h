@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,8 +27,6 @@
 
 #include "playlist.h"
 
-struct player_control;
-
 /**
  * Returns the song object which is currently queued.  Returns none if
  * there is none (yet?) or if MPD isn't playing.
@@ -46,11 +44,9 @@ playlist_get_queued_song(struct playlist *playlist);
  */
 void
 playlist_update_queued_song(struct playlist *playlist,
-			    struct player_control *pc,
 			    const struct song *prev);
 
 void
-playlist_play_order(struct playlist *playlist, struct player_control *pc,
-		    int orderNum);
+playlist_play_order(struct playlist *playlist, int orderNum);
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -84,8 +84,7 @@ apply_song_metadata(struct song *dest, const struct song *src)
 }
 
 struct song *
-playlist_check_translate_song(struct song *song, const char *base_uri,
-			      bool secure)
+playlist_check_translate_song(struct song *song, const char *base_uri)
 {
 	struct song *dest;
 
@@ -117,18 +116,17 @@ playlist_check_translate_song(struct song *song, const char *base_uri,
 		/* XXX fs_charset vs utf8? */
 		char *prefix = map_directory_fs(db_get_root());
 
-		if (prefix != NULL && g_str_has_prefix(uri, prefix) &&
-		    uri[strlen(prefix)] == '/')
-			uri += strlen(prefix) + 1;
-		else if (!secure) {
+		if (prefix == NULL || !g_str_has_prefix(uri, prefix) ||
+		    uri[strlen(prefix)] != '/') {
 			/* local files must be relative to the music
-			   directory when "secure" is enabled */
+			   directory */
 			g_free(prefix);
 			song_free(song);
 			return NULL;
 		}
 
 		base_uri = NULL;
+		uri += strlen(prefix) + 1;
 		g_free(prefix);
 	}
 
@@ -140,12 +138,6 @@ playlist_check_translate_song(struct song *song, const char *base_uri,
 	if (uri_has_scheme(uri)) {
 		dest = song_remote_new(uri);
 		g_free(uri);
-	} else if (g_path_is_absolute(uri) && secure) {
-		dest = song_file_load(uri, NULL);
-		if (dest == NULL) {
-			song_free(song);
-			return NULL;
-		}
 	} else {
 		dest = db_get_song(uri);
 		g_free(uri);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,10 +31,6 @@
 
 #include <assert.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <errno.h>
-#include <dirent.h>
 
 static char *music_dir;
 static size_t music_dir_length;
@@ -56,50 +52,24 @@ strdup_chop_slash(const char *path_fs)
 }
 
 static void
-check_directory(const char *path)
-{
-	struct stat st;
-	if (stat(path, &st) < 0) {
-		g_warning("Failed to stat directory \"%s\": %s",
-			  path, g_strerror(errno));
-		return;
-	}
-
-	if (!S_ISDIR(st.st_mode)) {
-		g_warning("Not a directory: %s", path);
-		return;
-	}
-
-#ifndef WIN32
-	char *x = g_build_filename(path, ".", NULL);
-	if (stat(x, &st) < 0 && errno == EACCES)
-		g_warning("No permission to traverse (\"execute\") directory: %s",
-			  path);
-	g_free(x);
-#endif
-
-	DIR *dir = opendir(path);
-	if (dir == NULL && errno == EACCES)
-		g_warning("No permission to read directory: %s", path);
-	else
-		closedir(dir);
-}
-
-static void
 mapper_set_music_dir(const char *path)
 {
-	check_directory(path);
-
 	music_dir = strdup_chop_slash(path);
 	music_dir_length = strlen(music_dir);
+
+	if (!g_file_test(music_dir, G_FILE_TEST_IS_DIR))
+		g_warning("music directory is not a directory: \"%s\"",
+			  music_dir);
 }
 
 static void
 mapper_set_playlist_dir(const char *path)
 {
-	check_directory(path);
-
 	playlist_dir = g_strdup(path);
+
+	if (!g_file_test(playlist_dir, G_FILE_TEST_IS_DIR))
+		g_warning("playlist directory is not a directory: \"%s\"",
+			  playlist_dir);
 }
 
 void mapper_init(const char *_music_dir, const char *_playlist_dir)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,7 +25,6 @@
 #include "songvec.h"
 #include "playlist_vector.h"
 
-#include <glib.h>
 #include <stdbool.h>
 #include <sys/types.h>
 
@@ -33,8 +32,6 @@
 
 #define DEVICE_INARCHIVE (dev_t)(-1)
 #define DEVICE_CONTAINER (dev_t)(-2)
-
-struct db_visitor;
 
 struct directory {
 	struct dirvec children;
@@ -46,7 +43,7 @@ struct directory {
 	time_t mtime;
 	ino_t inode;
 	dev_t device;
-	bool have_stat; /* not needed if ino_t == dev_t == 0 is impossible */
+	unsigned stat; /* not needed if ino_t == dev_t == 0 is impossible */
 	char path[sizeof(long)];
 };
 
@@ -130,9 +127,10 @@ directory_lookup_song(struct directory *directory, const char *uri);
 void
 directory_sort(struct directory *directory);
 
-bool
-directory_walk(const struct directory *directory, bool recursive,
-	       const struct db_visitor *visitor, void *ctx,
-	       GError **error_r);
+int
+directory_walk(struct directory *directory,
+	       int (*forEachSong)(struct song *, void *),
+	       int (*forEachDir)(struct directory *, void *),
+	       void *data);
 
 #endif

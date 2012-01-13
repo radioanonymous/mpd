@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,13 +20,11 @@
 #ifndef MPD_STATE_FILE_H
 #define MPD_STATE_FILE_H
 
-struct player_control;
+void
+state_file_init(const char *path);
 
 void
-state_file_init(const char *path, struct player_control *pc);
-
-void
-state_file_finish(struct player_control *pc);
+state_file_finish(void);
 
 void write_state_file(void);
 

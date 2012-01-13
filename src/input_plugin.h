@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -35,7 +35,7 @@ struct input_plugin {
 	/**
 	 * Global initialization.  This method is called when MPD starts.
 	 *
-	 * @param error_r location to store the error occurring, or
+	 * @param error_r location to store the error occuring, or
 	 * NULL to ignore errors
 	 * @return true on success, false if the plugin should be
 	 * disabled
@@ -48,37 +48,11 @@ struct input_plugin {
 	 */
 	void (*finish)(void);
 
-	struct input_stream *(*open)(const char *uri,
-				     GMutex *mutex, GCond *cond,
-				     GError **error_r);
+	struct input_stream *(*open)(const char *uri, GError **error_r);
 	void (*close)(struct input_stream *is);
 
-	/**
-	 * Check for errors that may have occurred in the I/O thread.
-	 * May be unimplemented for synchronous plugins.
-	 *
-	 * @return false on error
-	 */
-	bool (*check)(struct input_stream *is, GError **error_r);
-
-	/**
-	 * Update the public attributes.  Call before access.  Can be
-	 * NULL if the plugin always keeps its attributes up to date.
-	 */
-	void (*update)(struct input_stream *is);
-
 	struct tag *(*tag)(struct input_stream *is);
-
-	/**
-	 * Returns true if the next read operation will not block:
-	 * either data is available, or end-of-stream has been
-	 * reached, or an error has occurred.
-	 *
-	 * If this method is unimplemented, then it is assumed that
-	 * reading will never block.
-	 */
-	bool (*available)(struct input_stream *is);
-
+	int (*buffer)(struct input_stream *is, GError **error_r);
 	size_t (*read)(struct input_stream *is, void *ptr, size_t size,
 		       GError **error_r);
 	bool (*eof)(struct input_stream *is);

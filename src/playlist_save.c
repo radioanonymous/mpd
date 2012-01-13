@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,9 +19,7 @@
 
 #include "config.h"
 #include "playlist_save.h"
-#include "playlist.h"
 #include "stored_playlist.h"
-#include "queue.h"
 #include "song.h"
 #include "mapper.h"
 #include "path.h"
@@ -110,19 +108,18 @@ spl_save_playlist(const char *name_utf8, const struct playlist *playlist)
 	return spl_save_queue(name_utf8, &playlist->queue);
 }
 
-bool
-playlist_load_spl(struct playlist *playlist, struct player_control *pc,
-		  const char *name_utf8, GError **error_r)
+enum playlist_result
+playlist_load_spl(struct playlist *playlist, const char *name_utf8)
 {
 	GPtrArray *list;
 
-	list = spl_load(name_utf8, error_r);
+	list = spl_load(name_utf8);
 	if (list == NULL)
-		return false;
+		return PLAYLIST_RESULT_NO_SUCH_LIST;
 
 	for (unsigned i = 0; i < list->len; ++i) {
 		const char *temp = g_ptr_array_index(list, i);
-		if ((playlist_append_uri(playlist, pc, temp, NULL)) != PLAYLIST_RESULT_SUCCESS) {
+		if ((playlist_append_uri(playlist, temp, NULL)) != PLAYLIST_RESULT_SUCCESS) {
 			/* for windows compatibility, convert slashes */
 			char *temp2 = g_strdup(temp);
 			char *p = temp2;
@@ -131,7 +128,7 @@ playlist_load_spl(struct playlist *playlist, struct player_control *pc,
 					*p = '/';
 				p++;
 			}
-			if ((playlist_append_uri(playlist, pc, temp, NULL)) != PLAYLIST_RESULT_SUCCESS) {
+			if ((playlist_append_uri(playlist, temp, NULL)) != PLAYLIST_RESULT_SUCCESS) {
 				g_warning("can't add file \"%s\"", temp2);
 			}
 			g_free(temp2);
@@ -139,5 +136,5 @@ playlist_load_spl(struct playlist *playlist, struct player_control *pc,
 	}
 
 	spl_free(list);
-	return true;
+	return PLAYLIST_RESULT_SUCCESS;
 }

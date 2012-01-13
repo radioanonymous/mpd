@@ -103,11 +103,6 @@
 #
 #gapless_mp3_playback			"yes"
 #
-# Setting "restore_paused" to "yes" puts MPD into pause mode instead
-# of starting playback after startup.
-#
-#restore_paused "no"
-#
 # This setting enables MPD to create playlists in a format usable by other
 # music players.
 #
@@ -240,7 +235,6 @@ input {
 ##	protocol	"icecast2"		# optional
 ##	user		"source"		# optional
 ##	description	"My Stream Description"	# optional
-##	url		"http://example.com"	# optional
 ##	genre		"jazz"			# optional
 ##	public		"no"			# optional
 ##	timeout		"2"			# optional

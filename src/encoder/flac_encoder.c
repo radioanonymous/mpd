@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,8 +22,6 @@
 #include "encoder_plugin.h"
 #include "audio_format.h"
 #include "pcm_buffer.h"
-#include "fifo_buffer.h"
-#include "growing_fifo.h"
 
 #include <assert.h>
 #include <string.h>
@@ -40,11 +38,8 @@ struct flac_encoder {
 
 	struct pcm_buffer expand_buffer;
 
-	/**
-	 * This buffer will hold encoded data from libFLAC until it is
-	 * picked up with flac_encoder_read().
-	 */
-	struct fifo_buffer *output_buffer;
+	struct pcm_buffer buffer;
+	size_t buffer_length;
 };
 
 extern const struct encoder_plugin flac_encoder_plugin;
@@ -145,8 +140,11 @@ flac_write_callback(G_GNUC_UNUSED const FLAC__StreamEncoder *fse,
 {
 	struct flac_encoder *encoder = (struct flac_encoder *) client_data;
 
+	char *buffer = pcm_buffer_get(&encoder->buffer, encoder->buffer_length + bytes);
+
 	//transfer data to buffer
-	growing_fifo_append(&encoder->output_buffer, data, bytes);
+	memcpy( buffer + encoder->buffer_length, data, bytes);
+	encoder->buffer_length += bytes;
 
 	return FLAC__STREAM_ENCODER_WRITE_STATUS_OK;
 }
@@ -158,8 +156,8 @@ flac_encoder_close(struct encoder *_encoder)
 
 	FLAC__stream_encoder_delete(encoder->fse);
 
+	pcm_buffer_deinit(&encoder->buffer);
 	pcm_buffer_deinit(&encoder->expand_buffer);
-	fifo_buffer_free(encoder->output_buffer);
 }
 
 static bool
@@ -203,11 +201,11 @@ flac_encoder_open(struct encoder *_encoder, struct audio_format *audio_format,
 		return false;
 	}
 
+	encoder->buffer_length = 0;
+	pcm_buffer_init(&encoder->buffer);
 	pcm_buffer_init(&encoder->expand_buffer);
 
-	encoder->output_buffer = growing_fifo_new();
-
-	/* this immediately outputs data through callback */
+	/* this immediatelly outputs data throught callback */
 
 #if !defined(FLAC_API_VERSION_CURRENT) || FLAC_API_VERSION_CURRENT <= 7
 	{
@@ -327,18 +325,16 @@ static size_t
 flac_encoder_read(struct encoder *_encoder, void *dest, size_t length)
 {
 	struct flac_encoder *encoder = (struct flac_encoder *)_encoder;
+	char *buffer = pcm_buffer_get(&encoder->buffer, encoder->buffer_length);
 
-	size_t max_length;
-	const char *src = fifo_buffer_read(encoder->output_buffer,
-					   &max_length);
-	if (src == NULL)
-		return 0;
+	if (length > encoder->buffer_length)
+		length = encoder->buffer_length;
 
-	if (length > max_length)
-		length = max_length;
+	memcpy(dest, buffer, length);
 
-	memcpy(dest, src, length);
-	fifo_buffer_consume(encoder->output_buffer, length);
+	encoder->buffer_length -= length;
+	memmove(buffer, buffer + length, encoder->buffer_length);
+
 	return length;
 }
 

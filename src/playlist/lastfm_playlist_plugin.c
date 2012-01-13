@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -83,14 +83,15 @@ lastfm_finish(void)
  * @return data fetched, or NULL on error. Must be freed with g_free.
  */
 static char *
-lastfm_get(const char *url, GMutex *mutex, GCond *cond)
+lastfm_get(const char *url)
 {
 	struct input_stream *input_stream;
 	GError *error = NULL;
+	int ret;
 	char buffer[4096];
 	size_t length = 0, nbytes;
 
-	input_stream = input_stream_open(url, mutex, cond, &error);
+	input_stream = input_stream_open(url, &error);
 	if (input_stream == NULL) {
 		if (error != NULL) {
 			g_warning("%s", error->message);
@@ -100,9 +101,15 @@ lastfm_get(const char *url, GMutex *mutex, GCond *cond)
 		return NULL;
 	}
 
-	g_mutex_lock(mutex);
-
-	input_stream_wait_ready(input_stream);
+	while (!input_stream->ready) {
+		ret = input_stream_buffer(input_stream, &error);
+		if (ret < 0) {
+			input_stream_close(input_stream);
+			g_warning("%s", error->message);
+			g_error_free(error);
+			return NULL;
+		}
+	}
 
 	do {
 		nbytes = input_stream_read(input_stream, buffer + length,
@@ -117,15 +124,12 @@ lastfm_get(const char *url, GMutex *mutex, GCond *cond)
 				break;
 
 			/* I/O error */
-			g_mutex_unlock(mutex);
 			input_stream_close(input_stream);
 			return NULL;
 		}
 
 		length += nbytes;
 	} while (length < sizeof(buffer));
-
-	g_mutex_unlock(mutex);
 
 	input_stream_close(input_stream);
 	return g_strndup(buffer, length);
@@ -135,7 +139,7 @@ lastfm_get(const char *url, GMutex *mutex, GCond *cond)
  * Ini-style value fetcher.
  * @param response data through which to search.
  * @param name name of value to search for.
- * @return value for param name in param response or NULL on error. Free with g_free.
+ * @return value for param name in param reponse or NULL on error. Free with g_free.
  */
 static char *
 lastfm_find(const char *response, const char *name)
@@ -158,7 +162,7 @@ lastfm_find(const char *response, const char *name)
 }
 
 static struct playlist_provider *
-lastfm_open_uri(const char *uri, GMutex *mutex, GCond *cond)
+lastfm_open_uri(const char *uri)
 {
 	struct lastfm_playlist *playlist;
 	GError *error = NULL;
@@ -171,7 +175,7 @@ lastfm_open_uri(const char *uri, GMutex *mutex, GCond *cond)
 			"username=", lastfm_config.user, "&"
 			"passwordmd5=", lastfm_config.md5, "&"
 			"debug=0&partner=", NULL);
-	response = lastfm_get(p, mutex, cond);
+	response = lastfm_get(p);
 	g_free(p);
 	if (response == NULL)
 		return NULL;
@@ -203,7 +207,7 @@ lastfm_open_uri(const char *uri, GMutex *mutex, GCond *cond)
 				NULL);
 		g_free(escaped_uri);
 
-		response = lastfm_get(p, mutex, cond);
+		response = lastfm_get(p);
 		g_free(response);
 		g_free(p);
 
@@ -225,7 +229,7 @@ lastfm_open_uri(const char *uri, GMutex *mutex, GCond *cond)
 			NULL);
 	g_free(session);
 
-	playlist->is = input_stream_open(p, mutex, cond, &error);
+	playlist->is = input_stream_open(p, &error);
 	g_free(p);
 
 	if (playlist->is == NULL) {
@@ -239,16 +243,25 @@ lastfm_open_uri(const char *uri, GMutex *mutex, GCond *cond)
 		return NULL;
 	}
 
-	g_mutex_lock(mutex);
+	while (!playlist->is->ready) {
+		int ret = input_stream_buffer(playlist->is, &error);
+		if (ret < 0) {
+			input_stream_close(playlist->is);
+			g_free(playlist);
+			g_warning("%s", error->message);
+			g_error_free(error);
+			return NULL;
+		}
 
-	input_stream_wait_ready(playlist->is);
+		if (ret == 0)
+			/* nothing was buffered - wait */
+			g_usleep(10000);
+	}
 
 	/* last.fm does not send a MIME type, we have to fake it here
 	   :-( */
 	g_free(playlist->is->mime);
 	playlist->is->mime = g_strdup("application/xspf+xml");
-
-	g_mutex_unlock(mutex);
 
 	/* parse the XSPF playlist */
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
  */
 
 #include "config.h"
-#include "io_thread.h"
 #include "input_init.h"
 #include "input_stream.h"
 #include "tag_pool.h"
@@ -33,7 +32,6 @@
 #include <glib.h>
 
 #include <unistd.h>
-#include <stdlib.h>
 
 static void
 my_log_func(const gchar *log_domain, G_GNUC_UNUSED GLogLevelFlags log_level,
@@ -53,17 +51,20 @@ dump_input_stream(struct input_stream *is)
 	size_t num_read;
 	ssize_t num_written;
 
-	g_mutex_lock(is->mutex);
-
 	/* wait until the stream becomes ready */
 
-	input_stream_wait_ready(is);
+	while (!is->ready) {
+		int ret = input_stream_buffer(is, &error);
+		if (ret < 0) {
+			/* error */
+			g_warning("%s", error->message);
+			g_error_free(error);
+			return 2;
+		}
 
-	if (!input_stream_check(is, &error)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-		g_mutex_unlock(is->mutex);
-		return EXIT_FAILURE;
+		if (ret == 0)
+			/* nothing was buffered - wait */
+			g_usleep(10000);
 	}
 
 	/* print meta data */
@@ -97,15 +98,6 @@ dump_input_stream(struct input_stream *is)
 			break;
 	}
 
-	if (!input_stream_check(is, &error)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-		g_mutex_unlock(is->mutex);
-		return EXIT_FAILURE;
-	}
-
-	g_mutex_unlock(is->mutex);
-
 	return 0;
 }
 
@@ -130,13 +122,6 @@ int main(int argc, char **argv)
 	tag_pool_init();
 	config_global_init();
 
-	io_thread_init();
-	if (!io_thread_start(&error)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-		return EXIT_FAILURE;
-	}
-
 #ifdef ENABLE_ARCHIVE
 	archive_plugin_init_all();
 #endif
@@ -149,10 +134,7 @@ int main(int argc, char **argv)
 
 	/* open the stream and dump it */
 
-	GMutex *mutex = g_mutex_new();
-	GCond *cond = g_cond_new();
-
-	is = input_stream_open(argv[1], mutex, cond, &error);
+	is = input_stream_open(argv[1], &error);
 	if (is != NULL) {
 		ret = dump_input_stream(is);
 		input_stream_close(is);
@@ -165,9 +147,6 @@ int main(int argc, char **argv)
 		ret = 2;
 	}
 
-	g_cond_free(cond);
-	g_mutex_free(mutex);
-
 	/* deinitialize everything */
 
 	input_stream_global_finish();
@@ -175,8 +154,6 @@ int main(int argc, char **argv)
 #ifdef ENABLE_ARCHIVE
 	archive_plugin_deinit_all();
 #endif
-
-	io_thread_deinit();
 
 	config_global_finish();
 	tag_pool_deinit();

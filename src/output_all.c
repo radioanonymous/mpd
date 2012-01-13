@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,7 +27,6 @@
 #include "buffer.h"
 #include "player_control.h"
 #include "mpd_error.h"
-#include "notify.h"
 
 #ifndef NDEBUG
 #include "chunk.h"
@@ -41,7 +40,7 @@
 
 static struct audio_format input_audio_format;
 
-static struct audio_output **audio_outputs;
+static struct audio_output *audio_outputs;
 static unsigned int num_audio_outputs;
 
 /**
@@ -70,9 +69,7 @@ audio_output_get(unsigned i)
 {
 	assert(i < num_audio_outputs);
 
-	assert(audio_outputs[i] != NULL);
-
-	return audio_outputs[i];
+	return &audio_outputs[i];
 }
 
 struct audio_output *
@@ -103,7 +100,7 @@ audio_output_config_count(void)
 }
 
 void
-audio_output_all_init(struct player_control *pc)
+audio_output_all_init(void)
 {
 	const struct config_param *param = NULL;
 	unsigned int i;
@@ -112,10 +109,11 @@ audio_output_all_init(struct player_control *pc)
 	notify_init(&audio_output_client_notify);
 
 	num_audio_outputs = audio_output_config_count();
-	audio_outputs = g_new(struct audio_output *, num_audio_outputs);
+	audio_outputs = g_new(struct audio_output, num_audio_outputs);
 
 	for (i = 0; i < num_audio_outputs; i++)
 	{
+		struct audio_output *output = &audio_outputs[i];
 		unsigned int j;
 
 		param = config_get_next_param(CONF_AUDIO_OUTPUT, param);
@@ -123,8 +121,7 @@ audio_output_all_init(struct player_control *pc)
 		/* only allow param to be NULL if there just one audioOutput */
 		assert(param || (num_audio_outputs == 1));
 
-		struct audio_output *output = audio_output_new(param, pc, &error);
-		if (output == NULL) {
+		if (!audio_output_init(output, param, &error)) {
 			if (param != NULL)
 				MPD_ERROR("line %i: %s",
 					  param->line, error->message);
@@ -132,11 +129,9 @@ audio_output_all_init(struct player_control *pc)
 				MPD_ERROR("%s", error->message);
 		}
 
-		audio_outputs[i] = output;
-
 		/* require output names to be unique: */
 		for (j = 0; j < i; j++) {
-			if (!strcmp(output->name, audio_outputs[j]->name)) {
+			if (!strcmp(output->name, audio_outputs[j].name)) {
 				MPD_ERROR("output devices with identical "
 					  "names: %s\n", output->name);
 			}
@@ -150,8 +145,8 @@ audio_output_all_finish(void)
 	unsigned int i;
 
 	for (i = 0; i < num_audio_outputs; i++) {
-		audio_output_disable(audio_outputs[i]);
-		audio_output_finish(audio_outputs[i]);
+		audio_output_disable(&audio_outputs[i]);
+		audio_output_finish(&audio_outputs[i]);
 	}
 
 	g_free(audio_outputs);
@@ -165,7 +160,7 @@ void
 audio_output_all_enable_disable(void)
 {
 	for (unsigned i = 0; i < num_audio_outputs; i++) {
-		struct audio_output *ao = audio_outputs[i];
+		struct audio_output *ao = &audio_outputs[i];
 		bool enabled;
 
 		g_mutex_lock(ao->mutex);
@@ -189,7 +184,7 @@ static bool
 audio_output_all_finished(void)
 {
 	for (unsigned i = 0; i < num_audio_outputs; ++i) {
-		struct audio_output *ao = audio_outputs[i];
+		struct audio_output *ao = &audio_outputs[i];
 		bool not_finished;
 
 		g_mutex_lock(ao->mutex);
@@ -217,7 +212,7 @@ static void
 audio_output_allow_play_all(void)
 {
 	for (unsigned i = 0; i < num_audio_outputs; ++i)
-		audio_output_allow_play(audio_outputs[i]);
+		audio_output_allow_play(&audio_outputs[i]);
 }
 
 static void
@@ -242,7 +237,7 @@ static void
 audio_output_all_reset_reopen(void)
 {
 	for (unsigned i = 0; i < num_audio_outputs; ++i) {
-		struct audio_output *ao = audio_outputs[i];
+		struct audio_output *ao = &audio_outputs[i];
 
 		audio_output_reset_reopen(ao);
 	}
@@ -263,7 +258,7 @@ audio_output_all_update(void)
 		return false;
 
 	for (i = 0; i < num_audio_outputs; ++i)
-		ret = audio_output_update(audio_outputs[i],
+		ret = audio_output_update(&audio_outputs[i],
 					  &input_audio_format, g_mp) || ret;
 
 	return ret;
@@ -287,7 +282,7 @@ audio_output_all_play(struct music_chunk *chunk)
 	music_pipe_push(g_mp, chunk);
 
 	for (i = 0; i < num_audio_outputs; ++i)
-		audio_output_play(audio_outputs[i]);
+		audio_output_play(&audio_outputs[i]);
 
 	return true;
 }
@@ -326,10 +321,10 @@ audio_output_all_open(const struct audio_format *audio_format,
 	audio_output_all_update();
 
 	for (i = 0; i < num_audio_outputs; ++i) {
-		if (audio_outputs[i]->enabled)
+		if (audio_outputs[i].enabled)
 			enabled = true;
 
-		if (audio_outputs[i]->open)
+		if (audio_outputs[i].open)
 			ret = true;
 	}
 
@@ -373,7 +368,7 @@ static bool
 chunk_is_consumed(const struct music_chunk *chunk)
 {
 	for (unsigned i = 0; i < num_audio_outputs; ++i) {
-		const struct audio_output *ao = audio_outputs[i];
+		const struct audio_output *ao = &audio_outputs[i];
 		bool consumed;
 
 		g_mutex_lock(ao->mutex);
@@ -398,7 +393,7 @@ clear_tail_chunk(G_GNUC_UNUSED const struct music_chunk *chunk, bool *locked)
 	assert(music_pipe_contains(g_mp, chunk));
 
 	for (unsigned i = 0; i < num_audio_outputs; ++i) {
-		struct audio_output *ao = audio_outputs[i];
+		struct audio_output *ao = &audio_outputs[i];
 
 		/* this mutex will be unlocked by the caller when it's
 		   ready */
@@ -455,7 +450,7 @@ audio_output_all_check(void)
 			   by clear_tail_chunk() */
 			for (unsigned i = 0; i < num_audio_outputs; ++i)
 				if (locked[i])
-					g_mutex_unlock(audio_outputs[i]->mutex);
+					g_mutex_unlock(audio_outputs[i].mutex);
 
 		/* return the chunk to the buffer */
 		music_buffer_return(g_music_buffer, shifted);
@@ -465,17 +460,17 @@ audio_output_all_check(void)
 }
 
 bool
-audio_output_all_wait(struct player_control *pc, unsigned threshold)
+audio_output_all_wait(unsigned threshold)
 {
-	player_lock(pc);
+	player_lock();
 
 	if (audio_output_all_check() < threshold) {
-		player_unlock(pc);
+		player_unlock();
 		return true;
 	}
 
-	player_wait(pc);
-	player_unlock(pc);
+	player_wait();
+	player_unlock();
 
 	return audio_output_all_check() < threshold;
 }
@@ -488,7 +483,7 @@ audio_output_all_pause(void)
 	audio_output_all_update();
 
 	for (i = 0; i < num_audio_outputs; ++i)
-		audio_output_pause(audio_outputs[i]);
+		audio_output_pause(&audio_outputs[i]);
 
 	audio_output_wait_all();
 }
@@ -497,7 +492,7 @@ void
 audio_output_all_drain(void)
 {
 	for (unsigned i = 0; i < num_audio_outputs; ++i)
-		audio_output_drain_async(audio_outputs[i]);
+		audio_output_drain_async(&audio_outputs[i]);
 
 	audio_output_wait_all();
 }
@@ -510,7 +505,7 @@ audio_output_all_cancel(void)
 	/* send the cancel() command to all audio outputs */
 
 	for (i = 0; i < num_audio_outputs; ++i)
-		audio_output_cancel(audio_outputs[i]);
+		audio_output_cancel(&audio_outputs[i]);
 
 	audio_output_wait_all();
 
@@ -535,7 +530,7 @@ audio_output_all_close(void)
 	unsigned int i;
 
 	for (i = 0; i < num_audio_outputs; ++i)
-		audio_output_close(audio_outputs[i]);
+		audio_output_close(&audio_outputs[i]);
 
 	if (g_mp != NULL) {
 		assert(g_music_buffer != NULL);
@@ -558,7 +553,7 @@ audio_output_all_release(void)
 	unsigned int i;
 
 	for (i = 0; i < num_audio_outputs; ++i)
-		audio_output_release(audio_outputs[i]);
+		audio_output_release(&audio_outputs[i]);
 
 	if (g_mp != NULL) {
 		assert(g_music_buffer != NULL);

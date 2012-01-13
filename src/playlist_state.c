@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,7 +29,6 @@
 #include "queue_save.h"
 #include "path.h"
 #include "text_file.h"
-#include "conf.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -54,12 +53,11 @@
 #define PLAYLIST_BUFFER_SIZE	2*MPD_PATH_MAX
 
 void
-playlist_state_save(FILE *fp, const struct playlist *playlist,
-		    struct player_control *pc)
+playlist_state_save(FILE *fp, const struct playlist *playlist)
 {
 	struct player_status player_status;
 
-	pc_get_status(pc, &player_status);
+	pc_get_status(&player_status);
 
 	fputs(PLAYLIST_STATE_FILE_STATE, fp);
 
@@ -91,11 +89,10 @@ playlist_state_save(FILE *fp, const struct playlist *playlist,
 	fprintf(fp, PLAYLIST_STATE_FILE_CONSUME "%i\n",
 		playlist->queue.consume);
 	fprintf(fp, PLAYLIST_STATE_FILE_CROSSFADE "%i\n",
-		(int)(pc_get_cross_fade(pc)));
-	fprintf(fp, PLAYLIST_STATE_FILE_MIXRAMPDB "%f\n",
-		pc_get_mixramp_db(pc));
+		(int)(pc_get_cross_fade()));
+	fprintf(fp, PLAYLIST_STATE_FILE_MIXRAMPDB "%f\n", pc_get_mixramp_db());
 	fprintf(fp, PLAYLIST_STATE_FILE_MIXRAMPDELAY "%f\n",
-		pc_get_mixramp_delay(pc));
+		pc_get_mixramp_delay());
 	fputs(PLAYLIST_STATE_FILE_PLAYLIST_BEGIN "\n", fp);
 	queue_save(fp, &playlist->queue);
 	fputs(PLAYLIST_STATE_FILE_PLAYLIST_END "\n", fp);
@@ -126,11 +123,11 @@ playlist_state_load(FILE *fp, GString *buffer, struct playlist *playlist)
 
 bool
 playlist_state_restore(const char *line, FILE *fp, GString *buffer,
-		       struct playlist *playlist, struct player_control *pc)
+		       struct playlist *playlist)
 {
 	int current = -1;
 	int seek_time = 0;
-	enum player_state state = PLAYER_STATE_STOP;
+	int state = PLAYER_STATE_STOP;
 	bool random_mode = false;
 
 	if (!g_str_has_prefix(line, PLAYLIST_STATE_FILE_STATE))
@@ -151,16 +148,16 @@ playlist_state_restore(const char *line, FILE *fp, GString *buffer,
 			if (strcmp
 			    (&(line[strlen(PLAYLIST_STATE_FILE_REPEAT)]),
 			     "1") == 0) {
-				playlist_set_repeat(playlist, pc, true);
+				playlist_set_repeat(playlist, true);
 			} else
-				playlist_set_repeat(playlist, pc, false);
+				playlist_set_repeat(playlist, false);
 		} else if (g_str_has_prefix(line, PLAYLIST_STATE_FILE_SINGLE)) {
 			if (strcmp
 			    (&(line[strlen(PLAYLIST_STATE_FILE_SINGLE)]),
 			     "1") == 0) {
-				playlist_set_single(playlist, pc, true);
+				playlist_set_single(playlist, true);
 			} else
-				playlist_set_single(playlist, pc, false);
+				playlist_set_single(playlist, false);
 		} else if (g_str_has_prefix(line, PLAYLIST_STATE_FILE_CONSUME)) {
 			if (strcmp
 			    (&(line[strlen(PLAYLIST_STATE_FILE_CONSUME)]),
@@ -169,14 +166,11 @@ playlist_state_restore(const char *line, FILE *fp, GString *buffer,
 			} else
 				playlist_set_consume(playlist, false);
 		} else if (g_str_has_prefix(line, PLAYLIST_STATE_FILE_CROSSFADE)) {
-			pc_set_cross_fade(pc,
-					  atoi(line + strlen(PLAYLIST_STATE_FILE_CROSSFADE)));
+			pc_set_cross_fade(atoi(line + strlen(PLAYLIST_STATE_FILE_CROSSFADE)));
 		} else if (g_str_has_prefix(line, PLAYLIST_STATE_FILE_MIXRAMPDB)) {
-			pc_set_mixramp_db(pc,
-					  atof(line + strlen(PLAYLIST_STATE_FILE_MIXRAMPDB)));
+			pc_set_mixramp_db(atof(line + strlen(PLAYLIST_STATE_FILE_MIXRAMPDB)));
 		} else if (g_str_has_prefix(line, PLAYLIST_STATE_FILE_MIXRAMPDELAY)) {
-			pc_set_mixramp_delay(pc,
-					     atof(line + strlen(PLAYLIST_STATE_FILE_MIXRAMPDELAY)));
+			pc_set_mixramp_delay(atof(line + strlen(PLAYLIST_STATE_FILE_MIXRAMPDELAY)));
 		} else if (g_str_has_prefix(line, PLAYLIST_STATE_FILE_RANDOM)) {
 			random_mode =
 				strcmp(line + strlen(PLAYLIST_STATE_FILE_RANDOM),
@@ -191,46 +185,38 @@ playlist_state_restore(const char *line, FILE *fp, GString *buffer,
 		}
 	}
 
-	playlist_set_random(playlist, pc, random_mode);
+	playlist_set_random(playlist, random_mode);
 
 	if (!queue_is_empty(&playlist->queue)) {
 		if (!queue_valid_position(&playlist->queue, current))
 			current = 0;
 
-		if (state == PLAYER_STATE_PLAY &&
-		    config_get_bool("restore_paused", false))
-			/* the user doesn't want MPD to auto-start
-			   playback after startup; fall back to
-			   "pause" */
-			state = PLAYER_STATE_PAUSE;
-
 		/* enable all devices for the first time; this must be
 		   called here, after the audio output states were
 		   restored, before playback begins */
 		if (state != PLAYER_STATE_STOP)
-			pc_update_audio(pc);
+			pc_update_audio();
 
 		if (state == PLAYER_STATE_STOP /* && config_option */)
 			playlist->current = current;
 		else if (seek_time == 0)
-			playlist_play(playlist, pc, current);
+			playlist_play(playlist, current);
 		else
-			playlist_seek_song(playlist, pc, current, seek_time);
+			playlist_seek_song(playlist, current, seek_time);
 
 		if (state == PLAYER_STATE_PAUSE)
-			pc_pause(pc);
+			pc_pause();
 	}
 
 	return true;
 }
 
 unsigned
-playlist_state_get_hash(const struct playlist *playlist,
-			struct player_control *pc)
+playlist_state_get_hash(const struct playlist *playlist)
 {
 	struct player_status player_status;
 
-	pc_get_status(pc, &player_status);
+	pc_get_status(&player_status);
 
 	return playlist->queue.version ^
 		(player_status.state != PLAYER_STATE_STOP
@@ -240,7 +226,7 @@ playlist_state_get_hash(const struct playlist *playlist,
 		 ? (queue_order_to_position(&playlist->queue,
 					    playlist->current) << 16)
 		 : 0) ^
-		((int)pc_get_cross_fade(pc) << 20) ^
+		((int)pc_get_cross_fade() << 20) ^
 		(player_status.state << 24) ^
 		(playlist->queue.random << 27) ^
 		(playlist->queue.repeat << 28) ^

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 
 #include "config.h"
 #include "utils.h"
-#include "glib_compat.h"
 #include "conf.h"
 
 #include <glib.h>
@@ -34,11 +33,7 @@
 #include <pwd.h>
 #endif
 
-#if HAVE_IPV6 && WIN32
-#include <winsock2.h>
-#endif 
-
-#if HAVE_IPV6 && ! WIN32
+#ifdef HAVE_IPV6
 #include <sys/socket.h>
 #endif
 
@@ -46,25 +41,14 @@
 #include <windows.h>
 #endif
 
-G_GNUC_CONST
-static inline GQuark
-parse_path_quark(void)
+char *parsePath(char *path)
 {
-	return g_quark_from_static_string("path");
-}
-
-char *
-parsePath(const char *path, G_GNUC_UNUSED GError **error_r)
-{
-	assert(path != NULL);
-	assert(error_r == NULL || *error_r == NULL);
-
 #ifndef WIN32
 	if (!g_path_is_absolute(path) && path[0] != '~') {
-		g_set_error(error_r, parse_path_quark(), 0,
-			    "not an absolute path: %s", path);
+		g_warning("\"%s\" is not an absolute path", path);
 		return NULL;
 	} else if (path[0] == '~') {
+		size_t pos = 1;
 		const char *home;
 
 		if (path[1] == '/' || path[1] == '\0') {
@@ -72,8 +56,7 @@ parsePath(const char *path, G_GNUC_UNUSED GError **error_r)
 			if (user != NULL) {
 				struct passwd *passwd = getpwnam(user);
 				if (!passwd) {
-					g_set_error(error_r, parse_path_quark(), 0,
-						    "no such user: %s", user);
+					g_warning("no such user %s", user);
 					return NULL;
 				}
 
@@ -81,41 +64,53 @@ parsePath(const char *path, G_GNUC_UNUSED GError **error_r)
 			} else {
 				home = g_get_home_dir();
 				if (home == NULL) {
-					g_set_error_literal(error_r, parse_path_quark(), 0,
-							    "problems getting home "
-							    "for current user");
+					g_warning("problems getting home "
+						  "for current user");
 					return NULL;
 				}
 			}
-
-			++path;
 		} else {
-			++path;
+			bool foundSlash = false;
+			struct passwd *passwd;
+			char *c;
 
-			const char *slash = strchr(path, '/');
-			char *user = slash != NULL
-				? g_strndup(path, slash - path)
-				: g_strdup(path);
+			for (c = path + 1; *c != '\0' && *c != '/'; c++);
+			if (*c == '/') {
+				foundSlash = true;
+				*c = '\0';
+			}
+			pos = c - path;
 
-			struct passwd *passwd = getpwnam(user);
+			passwd = getpwnam(path + 1);
 			if (!passwd) {
-				g_set_error(error_r, parse_path_quark(), 0,
-					    "no such user: %s", user);
-				g_free(user);
+				g_warning("user \"%s\" not found", path + 1);
 				return NULL;
 			}
 
-			g_free(user);
+			if (foundSlash)
+				*c = '/';
 
 			home = passwd->pw_dir;
-			path = slash;
 		}
 
-		return g_strconcat(home, path, NULL);
+		return g_strconcat(home, path + pos, NULL);
 	} else {
 #endif
 		return g_strdup(path);
 #ifndef WIN32
 	}
 #endif
+}
+
+bool
+string_array_contains(const char *const* haystack, const char *needle)
+{
+	assert(haystack != NULL);
+	assert(needle != NULL);
+
+	for (; *haystack != NULL; ++haystack)
+		if (g_ascii_strcasecmp(*haystack, needle) == 0)
+			return true;
+
+	return false;
 }

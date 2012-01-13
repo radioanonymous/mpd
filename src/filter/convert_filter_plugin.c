@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -141,7 +141,7 @@ convert_filter_set(struct filter *_filter,
 	assert(audio_format_valid(&filter->out_audio_format));
 	assert(out_audio_format != NULL);
 	assert(audio_format_valid(out_audio_format));
-	assert(!filter->in_audio_format.reverse_endian);
+	assert(filter->in_audio_format.reverse_endian == 0);
 
 	filter->out_audio_format = *out_audio_format;
 }

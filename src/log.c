@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -133,20 +133,16 @@ open_log_file(void)
 	return open_cloexec(out_filename, O_CREAT | O_WRONLY | O_APPEND, 0666);
 }
 
-static bool
-log_init_file(const char *path, unsigned line, GError **error_r)
+static void
+log_init_file(const char *path, unsigned line)
 {
 	out_filename = path;
 	out_fd = open_log_file();
-	if (out_fd < 0) {
-		g_set_error(error_r, log_quark(), errno,
-			    "failed to open log file \"%s\" (config line %u): %s",
-			    path, line, g_strerror(errno));
-		return false;
-	}
+	if (out_fd < 0)
+		MPD_ERROR("problem opening log file \"%s\" (config line %u) "
+			  "for writing\n", path, line);
 
 	g_log_set_default_handler(file_log_func, NULL);
-	return true;
 }
 
 #ifdef HAVE_SYSLOG
@@ -236,8 +232,7 @@ log_early_init(bool verbose)
 	log_init_stdout();
 }
 
-bool
-log_init(bool verbose, bool use_stdout, GError **error_r)
+void log_init(bool verbose, bool use_stdout)
 {
 	const struct config_param *param;
 
@@ -250,7 +245,6 @@ log_init(bool verbose, bool use_stdout, GError **error_r)
 
 	if (use_stdout) {
 		log_init_stdout();
-		return true;
 	} else {
 		param = config_get_param(CONF_LOG_FILE);
 		if (param == NULL) {
@@ -258,31 +252,19 @@ log_init(bool verbose, bool use_stdout, GError **error_r)
 			/* no configuration: default to syslog (if
 			   available) */
 			log_init_syslog();
-			return true;
 #else
-			g_set_error(error_r, log_quark(), 0,
-				    "config parameter \"%s\" not found",
-				    CONF_LOG_FILE);
-			return false;
+			MPD_ERROR("config parameter \"%s\" not found\n",
+				  CONF_LOG_FILE);
 #endif
 #ifdef HAVE_SYSLOG
 		} else if (strcmp(param->value, "syslog") == 0) {
 			log_init_syslog();
-			return true;
 #endif
 		} else {
-			GError *error = NULL;
-			char *path = config_dup_path(CONF_LOG_FILE, &error);
-			if (path == NULL) {
-				assert(error != NULL);
-				g_propagate_error(error_r, error);
-				return false;
-			}
+			const char *path = config_get_path(CONF_LOG_FILE);
+			assert(path != NULL);
 
-			bool success = log_init_file(path, param->line,
-						     error_r);
-			g_free(path);
-			return success;
+			log_init_file(path, param->line);
 		}
 	}
 }

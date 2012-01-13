@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,8 @@
 #include "decoder_api.h"
 #include "decoder_internal.h"
 #include "decoder_control.h"
-#include "audio_config.h"
+#include "player_control.h"
+#include "audio.h"
 #include "song.h"
 #include "buffer.h"
 #include "pipe.h"
@@ -56,17 +57,15 @@ decoder_initialized(struct decoder *decoder,
 
 	dc->in_audio_format = *audio_format;
 	getOutputAudioFormat(audio_format, &dc->out_audio_format);
-	/* force host byte order, even if the decoder supplies reverse
-	   endian */
-	dc->out_audio_format.reverse_endian = false;
 
 	dc->seekable = seekable;
 	dc->total_time = total_time;
 
 	decoder_lock(dc);
 	dc->state = DECODE_STATE_DECODE;
-	g_cond_signal(dc->client_cond);
 	decoder_unlock(dc);
+
+	player_lock_signal();
 
 	g_debug("audio_format=%s, seekable=%s",
 		audio_format_to_string(&dc->in_audio_format, &af_string),
@@ -96,12 +95,6 @@ decoder_prepare_initial_seek(struct decoder *decoder)
 		return true;
 
 	if (decoder->initial_seek_pending) {
-		if (!dc->seekable) {
-			/* seeking is not possible */
-			decoder->initial_seek_pending = false;
-			return false;
-		}
-
 		if (dc->command == DECODE_COMMAND_NONE) {
 			/* begin initial seek */
 
@@ -184,8 +177,9 @@ decoder_command_finished(struct decoder *decoder)
 	}
 
 	dc->command = DECODE_COMMAND_NONE;
-	g_cond_signal(dc->client_cond);
 	decoder_unlock(dc);
+
+	player_lock_signal();
 }
 
 double decoder_seek_where(G_GNUC_UNUSED struct decoder * decoder)
@@ -225,73 +219,50 @@ void decoder_seek_error(struct decoder * decoder)
 	decoder_command_finished(decoder);
 }
 
-/**
- * Should be read operation be cancelled?  That is the case when the
- * player thread has sent a command such as "STOP".
- */
-G_GNUC_PURE
-static inline bool
-decoder_check_cancel_read(const struct decoder *decoder)
-{
-	if (decoder == NULL)
-		return false;
-
-	const struct decoder_control *dc = decoder->dc;
-	if (dc->command == DECODE_COMMAND_NONE)
-		return false;
-
-	/* ignore the SEEK command during initialization, the plugin
-	   should handle that after it has initialized successfully */
-	if (dc->command == DECODE_COMMAND_SEEK &&
-	    (dc->state == DECODE_STATE_START || decoder->seeking))
-		return false;
-
-	return true;
-}
-
 size_t decoder_read(struct decoder *decoder,
 		    struct input_stream *is,
 		    void *buffer, size_t length)
 {
-	/* XXX don't allow decoder==NULL */
+	const struct decoder_control *dc =
+		decoder != NULL ? decoder->dc : NULL;
 	GError *error = NULL;
 	size_t nbytes;
 
 	assert(decoder == NULL ||
-	       decoder->dc->state == DECODE_STATE_START ||
-	       decoder->dc->state == DECODE_STATE_DECODE);
+	       dc->state == DECODE_STATE_START ||
+	       dc->state == DECODE_STATE_DECODE);
 	assert(is != NULL);
 	assert(buffer != NULL);
 
 	if (length == 0)
 		return 0;
 
-	input_stream_lock(is);
-
 	while (true) {
-		if (decoder_check_cancel_read(decoder)) {
-			input_stream_unlock(is);
+		/* XXX don't allow decoder==NULL */
+		if (decoder != NULL &&
+		    /* ignore the SEEK command during initialization,
+		       the plugin should handle that after it has
+		       initialized successfully */
+		    (dc->command != DECODE_COMMAND_SEEK ||
+		     (dc->state != DECODE_STATE_START && !decoder->seeking)) &&
+		    dc->command != DECODE_COMMAND_NONE)
+			return 0;
+
+		nbytes = input_stream_read(is, buffer, length, &error);
+
+		if (G_UNLIKELY(nbytes == 0 && error != NULL)) {
+			g_warning("%s", error->message);
+			g_error_free(error);
 			return 0;
 		}
 
-		if (input_stream_available(is))
-			break;
+		if (nbytes > 0 || input_stream_eof(is))
+			return nbytes;
 
-		g_cond_wait(is->cond, is->mutex);
+		/* sleep for a fraction of a second! */
+		/* XXX don't sleep, wait for an event instead */
+		g_usleep(10000);
 	}
-
-	nbytes = input_stream_read(is, buffer, length, &error);
-	assert(nbytes == 0 || error == NULL);
-	assert(nbytes > 0 || error != NULL || input_stream_eof(is));
-
-	if (G_UNLIKELY(nbytes == 0 && error != NULL)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-	}
-
-	input_stream_unlock(is);
-
-	return nbytes;
 }
 
 void
@@ -308,7 +279,8 @@ decoder_timestamp(struct decoder *decoder, double t)
  * (decoder.chunk) if there is one.
  */
 static enum decoder_command
-do_send_tag(struct decoder *decoder, const struct tag *tag)
+do_send_tag(struct decoder *decoder, struct input_stream *is,
+	    const struct tag *tag)
 {
 	struct music_chunk *chunk;
 
@@ -316,12 +288,12 @@ do_send_tag(struct decoder *decoder, const struct tag *tag)
 		/* there is a partial chunk - flush it, we want the
 		   tag in a new chunk */
 		decoder_flush_chunk(decoder);
-		g_cond_signal(decoder->dc->client_cond);
+		player_lock_signal();
 	}
 
 	assert(decoder->chunk == NULL);
 
-	chunk = decoder_get_chunk(decoder);
+	chunk = decoder_get_chunk(decoder, is);
 	if (chunk == NULL) {
 		assert(decoder->dc->command != DECODE_COMMAND_NONE);
 		return decoder->dc->command;
@@ -337,7 +309,7 @@ update_stream_tag(struct decoder *decoder, struct input_stream *is)
 	struct tag *tag;
 
 	tag = is != NULL
-		? input_stream_lock_tag(is)
+		? input_stream_tag(is)
 		: NULL;
 	if (tag == NULL) {
 		tag = decoder->song_tag;
@@ -388,11 +360,11 @@ decoder_data(struct decoder *decoder,
 
 			tag = tag_merge(decoder->decoder_tag,
 					decoder->stream_tag);
-			cmd = do_send_tag(decoder, tag);
+			cmd = do_send_tag(decoder, is, tag);
 			tag_free(tag);
 		} else
 			/* send only the stream tag */
-			cmd = do_send_tag(decoder, decoder->stream_tag);
+			cmd = do_send_tag(decoder, is, decoder->stream_tag);
 
 		if (cmd != DECODE_COMMAND_NONE)
 			return cmd;
@@ -418,7 +390,7 @@ decoder_data(struct decoder *decoder,
 		size_t nbytes;
 		bool full;
 
-		chunk = decoder_get_chunk(decoder);
+		chunk = decoder_get_chunk(decoder, is);
 		if (chunk == NULL) {
 			assert(dc->command != DECODE_COMMAND_NONE);
 			return dc->command;
@@ -431,7 +403,7 @@ decoder_data(struct decoder *decoder,
 		if (dest == NULL) {
 			/* the chunk is full, flush it */
 			decoder_flush_chunk(decoder);
-			g_cond_signal(dc->client_cond);
+			player_lock_signal();
 			continue;
 		}
 
@@ -450,7 +422,7 @@ decoder_data(struct decoder *decoder,
 		if (full) {
 			/* the chunk is full, flush it */
 			decoder_flush_chunk(decoder);
-			g_cond_signal(dc->client_cond);
+			player_lock_signal();
 		}
 
 		data += nbytes;
@@ -505,11 +477,11 @@ decoder_tag(G_GNUC_UNUSED struct decoder *decoder, struct input_stream *is,
 		struct tag *merged;
 
 		merged = tag_merge(decoder->stream_tag, decoder->decoder_tag);
-		cmd = do_send_tag(decoder, merged);
+		cmd = do_send_tag(decoder, is, merged);
 		tag_free(merged);
 	} else
 		/* send only the decoder tag */
-		cmd = do_send_tag(decoder, tag);
+		cmd = do_send_tag(decoder, is, tag);
 
 	return cmd;
 }
@@ -542,7 +514,7 @@ decoder_replay_gain(struct decoder *decoder,
 			   replay gain values affect the following
 			   samples */
 			decoder_flush_chunk(decoder);
-			g_cond_signal(decoder->dc->client_cond);
+			player_lock_signal();
 		}
 	} else
 		decoder->replay_gain_serial = 0;

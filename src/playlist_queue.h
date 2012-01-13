@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,13 +24,10 @@
 #ifndef MPD_PLAYLIST_QUEUE_H
 #define MPD_PLAYLIST_QUEUE_H
 
-#include "playlist_error.h"
-
-#include <stdbool.h>
+#include "playlist.h"
 
 struct playlist_provider;
 struct playlist;
-struct player_control;
 
 /**
  * Loads the contents of a playlist and append it to the specified
@@ -41,17 +38,14 @@ struct player_control;
  */
 enum playlist_result
 playlist_load_into_queue(const char *uri, struct playlist_provider *source,
-			 struct playlist *dest, struct player_control *pc,
-			 bool secure);
+			 struct playlist *dest);
 
 /**
  * Opens a playlist with a playlist plugin and append to the specified
  * play queue.
  */
 enum playlist_result
-playlist_open_into_queue(const char *uri,
-			 struct playlist *dest, struct player_control *pc,
-			 bool secure);
+playlist_open_into_queue(const char *uri, struct playlist *dest);
 
 #endif
 

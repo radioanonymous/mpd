@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,6 +26,7 @@
 #include "decoder_api.h"
 #include "replay_gain_ape.h"
 #include "input_stream.h"
+#include "player_control.h"
 #include "pipe.h"
 #include "song.h"
 #include "tag.h"
@@ -37,25 +38,20 @@
 #include <glib.h>
 
 #include <unistd.h>
-#include <stdio.h> /* for SEEK_SET */
 
 #undef G_LOG_DOMAIN
 #define G_LOG_DOMAIN "decoder_thread"
 
-/**
- * Marks the current decoder command as "finished" and notifies the
- * player thread.
- *
- * @param dc the #decoder_control object; must be locked
- */
-static void
-decoder_command_finished_locked(struct decoder_control *dc)
+static enum decoder_command
+decoder_lock_get_command(struct decoder_control *dc)
 {
-	assert(dc->command != DECODE_COMMAND_NONE);
+	enum decoder_command command;
 
-	dc->command = DECODE_COMMAND_NONE;
+	decoder_lock(dc);
+	command = dc->command;
+	decoder_unlock(dc);
 
-	g_cond_signal(dc->client_cond);
+	return command;
 }
 
 /**
@@ -75,7 +71,7 @@ decoder_input_stream_open(struct decoder_control *dc, const char *uri)
 	GError *error = NULL;
 	struct input_stream *is;
 
-	is = input_stream_open(uri, dc->mutex, dc->cond, &error);
+	is = input_stream_open(uri, &error);
 	if (is == NULL) {
 		if (error != NULL) {
 			g_warning("%s", error->message);
@@ -88,26 +84,18 @@ decoder_input_stream_open(struct decoder_control *dc, const char *uri)
 	/* wait for the input stream to become ready; its metadata
 	   will be available then */
 
-	decoder_lock(dc);
-
-	input_stream_update(is);
 	while (!is->ready &&
-	       dc->command != DECODE_COMMAND_STOP) {
-		decoder_wait(dc);
+	       decoder_lock_get_command(dc) != DECODE_COMMAND_STOP) {
+		int ret;
 
-		input_stream_update(is);
+		ret = input_stream_buffer(is, &error);
+		if (ret < 0) {
+			input_stream_close(is);
+			g_warning("%s", error->message);
+			g_error_free(error);
+			return NULL;
+		}
 	}
-
-	if (!input_stream_check(is, &error)) {
-		decoder_unlock(dc);
-
-		g_warning("%s", error->message);
-		g_error_free(error);
-
-		return NULL;
-	}
-
-	decoder_unlock(dc);
 
 	return is;
 }
@@ -129,10 +117,10 @@ decoder_stream_decode(const struct decoder_plugin *plugin,
 	if (decoder->dc->command == DECODE_COMMAND_STOP)
 		return true;
 
+	decoder_unlock(decoder->dc);
+
 	/* rewind the stream, so each plugin gets a fresh start */
 	input_stream_seek(input_stream, 0, SEEK_SET, NULL);
-
-	decoder_unlock(decoder->dc);
 
 	decoder_plugin_stream_decode(plugin, decoder, input_stream);
 
@@ -395,8 +383,9 @@ decoder_run_song(struct decoder_control *dc,
 	decoder.chunk = NULL;
 
 	dc->state = DECODE_STATE_START;
+	dc->command = DECODE_COMMAND_NONE;
 
-	decoder_command_finished_locked(dc);
+	player_signal();
 
 	pcm_convert_init(&decoder.conv_state);
 
@@ -442,7 +431,6 @@ decoder_run(struct decoder_control *dc)
 
 	if (uri == NULL) {
 		dc->state = DECODE_STATE_ERROR;
-		decoder_command_finished_locked(dc);
 		return;
 	}
 
@@ -475,10 +463,16 @@ decoder_task(gpointer arg)
 
 		case DECODE_COMMAND_SEEK:
 			decoder_run(dc);
+
+			dc->command = DECODE_COMMAND_NONE;
+
+			player_signal();
 			break;
 
 		case DECODE_COMMAND_STOP:
-			decoder_command_finished_locked(dc);
+			dc->command = DECODE_COMMAND_NONE;
+
+			player_signal();
 			break;
 
 		case DECODE_COMMAND_NONE:

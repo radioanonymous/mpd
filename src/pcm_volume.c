@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,9 +31,9 @@
 #define G_LOG_DOMAIN "pcm_volume"
 
 static void
-pcm_volume_change_8(int8_t *buffer, const int8_t *end, int volume)
+pcm_volume_change_8(int8_t *buffer, unsigned num_samples, int volume)
 {
-	while (buffer < end) {
+	while (num_samples > 0) {
 		int32_t sample = *buffer;
 
 		sample = (sample * volume + pcm_volume_dither() +
@@ -41,13 +41,14 @@ pcm_volume_change_8(int8_t *buffer, const int8_t *end, int volume)
 			/ PCM_VOLUME_1;
 
 		*buffer++ = pcm_range(sample, 8);
+		--num_samples;
 	}
 }
 
 static void
-pcm_volume_change_16(int16_t *buffer, const int16_t *end, int volume)
+pcm_volume_change_16(int16_t *buffer, unsigned num_samples, int volume)
 {
-	while (buffer < end) {
+	while (num_samples > 0) {
 		int32_t sample = *buffer;
 
 		sample = (sample * volume + pcm_volume_dither() +
@@ -55,6 +56,7 @@ pcm_volume_change_16(int16_t *buffer, const int16_t *end, int volume)
 			/ PCM_VOLUME_1;
 
 		*buffer++ = pcm_range(sample, 16);
+		--num_samples;
 	}
 }
 
@@ -90,9 +92,9 @@ pcm_volume_sample_24(int32_t sample, int32_t volume, G_GNUC_UNUSED int32_t dithe
 #endif
 
 static void
-pcm_volume_change_24(int32_t *buffer, const int32_t *end, int volume)
+pcm_volume_change_24(int32_t *buffer, unsigned num_samples, int volume)
 {
-	while (buffer < end) {
+	while (num_samples > 0) {
 #ifdef __i386__
 		/* assembly version for i386 */
 		int32_t sample = *buffer;
@@ -108,13 +110,14 @@ pcm_volume_change_24(int32_t *buffer, const int32_t *end, int volume)
 			/ PCM_VOLUME_1;
 #endif
 		*buffer++ = pcm_range(sample, 24);
+		--num_samples;
 	}
 }
 
 static void
-pcm_volume_change_32(int32_t *buffer, const int32_t *end, int volume)
+pcm_volume_change_32(int32_t *buffer, unsigned num_samples, int volume)
 {
-	while (buffer < end) {
+	while (num_samples > 0) {
 #ifdef __i386__
 		/* assembly version for i386 */
 		int32_t sample = *buffer;
@@ -129,22 +132,14 @@ pcm_volume_change_32(int32_t *buffer, const int32_t *end, int volume)
 			/ PCM_VOLUME_1;
 		*buffer++ = pcm_range_64(sample, 32);
 #endif
-	}
-}
 
-static void
-pcm_volume_change_float(float *buffer, const float *end, float volume)
-{
-	while (buffer < end) {
-		float sample = *buffer;
-		sample *= volume;
-		*buffer++ = sample;
+		--num_samples;
 	}
 }
 
 bool
-pcm_volume(void *buffer, size_t length,
-	   enum sample_format format,
+pcm_volume(void *buffer, int length,
+	   const struct audio_format *format,
 	   int volume)
 {
 	if (volume == PCM_VOLUME_1)
@@ -155,36 +150,27 @@ pcm_volume(void *buffer, size_t length,
 		return true;
 	}
 
-	const void *end = pcm_end_pointer(buffer, length);
-	switch (format) {
-	case SAMPLE_FORMAT_UNDEFINED:
-	case SAMPLE_FORMAT_S24:
-		/* not implemented */
-		return false;
-
+	switch (format->format) {
 	case SAMPLE_FORMAT_S8:
-		pcm_volume_change_8(buffer, end, volume);
+		pcm_volume_change_8((int8_t *)buffer, length, volume);
 		return true;
 
 	case SAMPLE_FORMAT_S16:
-		pcm_volume_change_16(buffer, end, volume);
+		pcm_volume_change_16((int16_t *)buffer, length / 2,
+				     volume);
 		return true;
 
 	case SAMPLE_FORMAT_S24_P32:
-		pcm_volume_change_24(buffer, end, volume);
+		pcm_volume_change_24((int32_t*)buffer, length / 4,
+				     volume);
 		return true;
 
 	case SAMPLE_FORMAT_S32:
-		pcm_volume_change_32(buffer, end, volume);
+		pcm_volume_change_32((int32_t*)buffer, length / 4,
+				     volume);
 		return true;
 
-	case SAMPLE_FORMAT_FLOAT:
-		pcm_volume_change_float(buffer, end,
-					pcm_volume_to_float(volume));
-		return true;
+	default:
+		return false;
 	}
-
-	/* unreachable */
-	assert(false);
-	return false;
 }

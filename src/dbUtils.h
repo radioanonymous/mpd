@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,26 +20,37 @@
 #ifndef MPD_DB_UTILS_H
 #define MPD_DB_UTILS_H
 
-#include "gcc.h"
-
-#include <glib.h>
-#include <stdbool.h>
-
+struct client;
 struct locate_item_list;
-struct player_control;
 
-gcc_nonnull(1,2)
-bool
-addAllIn(struct player_control *pc, const char *uri, GError **error_r);
+int printAllIn(struct client *client, const char *name);
 
-gcc_nonnull(1,2)
-bool
-addAllInToStoredPlaylist(const char *uri_utf8, const char *path_utf8,
-			 GError **error_r);
+int addAllIn(const char *name);
 
-gcc_nonnull(1,2,3)
-bool
-findAddIn(struct player_control *pc, const char *name,
-	  const struct locate_item_list *criteria, GError **error_r);
+int addAllInToStoredPlaylist(const char *name, const char *utf8file);
+
+int printInfoForAllIn(struct client *client, const char *name);
+
+int
+searchForSongsIn(struct client *client, const char *name,
+		 const struct locate_item_list *criteria);
+
+int
+findSongsIn(struct client *client, const char *name,
+	    const struct locate_item_list *criteria);
+
+int
+findAddIn(struct client *client, const char *name,
+	  const struct locate_item_list *criteria);
+
+int
+searchStatsForSongsIn(struct client *client, const char *name,
+		      const struct locate_item_list *criteria);
+
+unsigned long sumSongTimesIn(const char *name);
+
+int
+listAllUniqueTags(struct client *client, int type,
+		  const struct locate_item_list *criteria);
 
 #endif

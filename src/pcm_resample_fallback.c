@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,12 +23,6 @@
 #include <assert.h>
 
 void
-pcm_resample_fallback_init(struct pcm_resample_state *state)
-{
-	pcm_buffer_init(&state->buffer);
-}
-
-void
 pcm_resample_fallback_deinit(struct pcm_resample_state *state)
 {
 	pcm_buffer_deinit(&state->buffer);
@@ -37,7 +31,7 @@ pcm_resample_fallback_deinit(struct pcm_resample_state *state)
 /* resampling code blatantly ripped from ESD */
 const int16_t *
 pcm_resample_fallback_16(struct pcm_resample_state *state,
-			 unsigned channels,
+			 uint8_t channels,
 			 unsigned src_rate,
 			 const int16_t *src_buffer, size_t src_size,
 			 unsigned dest_rate,
@@ -78,7 +72,7 @@ pcm_resample_fallback_16(struct pcm_resample_state *state,
 
 const int32_t *
 pcm_resample_fallback_32(struct pcm_resample_state *state,
-			 unsigned channels,
+			 uint8_t channels,
 			 unsigned src_rate,
 			 const int32_t *src_buffer, size_t src_size,
 			 unsigned dest_rate,

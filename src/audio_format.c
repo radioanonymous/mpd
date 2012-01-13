@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,25 +28,6 @@
 #define REVERSE_ENDIAN_SUFFIX "_be"
 #endif
 
-void
-audio_format_mask_apply(struct audio_format *af,
-			const struct audio_format *mask)
-{
-	assert(audio_format_valid(af));
-	assert(audio_format_mask_valid(mask));
-
-	if (mask->sample_rate != 0)
-		af->sample_rate = mask->sample_rate;
-
-	if (mask->format != SAMPLE_FORMAT_UNDEFINED)
-		af->format = mask->format;
-
-	if (mask->channels != 0)
-		af->channels = mask->channels;
-
-	assert(audio_format_valid(af));
-}
-
 const char *
 sample_format_to_string(enum sample_format format)
 {
@@ -68,9 +49,6 @@ sample_format_to_string(enum sample_format format)
 
 	case SAMPLE_FORMAT_S32:
 		return "32";
-
-	case SAMPLE_FORMAT_FLOAT:
-		return "f";
 	}
 
 	/* unreachable */

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,11 +20,7 @@
 #ifndef PCM_BUFFER_H
 #define PCM_BUFFER_H
 
-#include "check.h"
-
 #include <glib.h>
-
-#include <assert.h>
 
 /**
  * Manager for a temporary buffer which grows as needed.  We could
@@ -43,8 +39,6 @@ struct pcm_buffer {
 static inline void
 pcm_buffer_init(struct pcm_buffer *buffer)
 {
-	assert(buffer != NULL);
-
 	buffer->buffer = NULL;
 	buffer->size = 0;
 }
@@ -55,8 +49,6 @@ pcm_buffer_init(struct pcm_buffer *buffer)
 static inline void
 pcm_buffer_deinit(struct pcm_buffer *buffer)
 {
-	assert(buffer != NULL);
-
 	g_free(buffer->buffer);
 
 	buffer->buffer = NULL;
@@ -66,8 +58,19 @@ pcm_buffer_deinit(struct pcm_buffer *buffer)
  * Get the buffer, and guarantee a minimum size.  This buffer becomes
  * invalid with the next pcm_buffer_get() call.
  */
-G_GNUC_MALLOC
-void *
-pcm_buffer_get(struct pcm_buffer *buffer, size_t size);
+static inline void *
+pcm_buffer_get(struct pcm_buffer *buffer, size_t size)
+{
+	if (buffer->size < size) {
+		/* free the old buffer */
+		g_free(buffer->buffer);
+
+		/* allocate a new buffer; align at 8 kB boundaries */
+		buffer->size = ((size - 1) | 0x1fff) + 1;
+		buffer->buffer = g_malloc(buffer->size);
+	}
+
+	return buffer->buffer;
+}
 
 #endif

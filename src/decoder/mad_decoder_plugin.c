@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -168,7 +168,7 @@ mp3_data_init(struct mp3_data *data, struct decoder *decoder,
 
 static bool mp3_seek(struct mp3_data *data, long offset)
 {
-	if (!input_stream_lock_seek(data->input_stream, offset, SEEK_SET, NULL))
+	if (!input_stream_seek(data->input_stream, offset, SEEK_SET, NULL))
 		return false;
 
 	mad_stream_buffer(&data->stream, data->input_buffer, 0);

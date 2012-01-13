@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -42,8 +42,9 @@ directory_quark(void)
 }
 
 void
-directory_save(FILE *fp, const struct directory *directory)
+directory_save(FILE *fp, struct directory *directory)
 {
+	struct dirvec *children = &directory->children;
 	size_t i;
 
 	if (!directory_is_root(directory)) {
@@ -54,9 +55,8 @@ directory_save(FILE *fp, const struct directory *directory)
 			directory_get_path(directory));
 	}
 
-	const struct dirvec *children = &directory->children;
 	for (i = 0; i < children->nr; ++i) {
-		const struct directory *cur = children->base[i];
+		struct directory *cur = children->base[i];
 		char *base = g_path_get_basename(cur->path);
 
 		fprintf(fp, DIRECTORY_DIR "%s\n", base);

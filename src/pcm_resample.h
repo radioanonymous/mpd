@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -45,7 +45,7 @@ struct pcm_resample_state {
 	struct {
 		unsigned src_rate;
 		unsigned dest_rate;
-		unsigned channels;
+		uint8_t channels;
 	} prev;
 
 	int error;
@@ -53,9 +53,6 @@ struct pcm_resample_state {
 
 	struct pcm_buffer buffer;
 };
-
-bool
-pcm_resample_global_init(GError **error_r);
 
 /**
  * Initializes a pcm_resample_state object.
@@ -67,26 +64,6 @@ void pcm_resample_init(struct pcm_resample_state *state);
  * memory.
  */
 void pcm_resample_deinit(struct pcm_resample_state *state);
-
-/**
- * Resamples 32 bit float data.
- *
- * @param state an initialized pcm_resample_state object
- * @param channels the number of channels
- * @param src_rate the source sample rate
- * @param src the source PCM buffer
- * @param src_size the size of #src in bytes
- * @param dest_rate the requested destination sample rate
- * @param dest_size_r returns the number of bytes of the destination buffer
- * @return the destination buffer
- */
-const float *
-pcm_resample_float(struct pcm_resample_state *state,
-		   unsigned channels,
-		   unsigned src_rate,
-		   const float *src_buffer, size_t src_size,
-		   unsigned dest_rate, size_t *dest_size_r,
-		   GError **error_r);
 
 /**
  * Resamples 16 bit PCM data.
@@ -102,7 +79,7 @@ pcm_resample_float(struct pcm_resample_state *state,
  */
 const int16_t *
 pcm_resample_16(struct pcm_resample_state *state,
-		unsigned channels,
+		uint8_t channels,
 		unsigned src_rate,
 		const int16_t *src_buffer, size_t src_size,
 		unsigned dest_rate, size_t *dest_size_r,
@@ -122,7 +99,7 @@ pcm_resample_16(struct pcm_resample_state *state,
  */
 const int32_t *
 pcm_resample_32(struct pcm_resample_state *state,
-		unsigned channels,
+		uint8_t channels,
 		unsigned src_rate,
 		const int32_t *src_buffer, size_t src_size,
 		unsigned dest_rate, size_t *dest_size_r,
@@ -142,7 +119,7 @@ pcm_resample_32(struct pcm_resample_state *state,
  */
 static inline const int32_t *
 pcm_resample_24(struct pcm_resample_state *state,
-		unsigned channels,
+		uint8_t channels,
 		unsigned src_rate,
 		const int32_t *src_buffer, size_t src_size,
 		unsigned dest_rate, size_t *dest_size_r,

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -37,9 +37,6 @@
 #ifndef MPD_PLAYER_THREAD_H
 #define MPD_PLAYER_THREAD_H
 
-struct player_control;
-
-void
-player_create(struct player_control *pc);
+void player_create(void);
 
 #endif

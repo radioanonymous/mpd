@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,8 +26,6 @@
 #include <glib.h>
 
 #include <time.h>
-
-struct config_param;
 
 enum audio_output_command {
 	AO_COMMAND_NONE = 0,
@@ -64,6 +62,12 @@ struct audio_output {
 	 * The plugin which implements this output device.
 	 */
 	const struct audio_output_plugin *plugin;
+
+	/**
+	 * The plugin's internal data.  It is passed to every plugin
+	 * method.
+	 */
+	void *data;
 
 	/**
 	 * The #mixer object associated with this audio output device.
@@ -213,12 +217,6 @@ struct audio_output {
 	GCond *cond;
 
 	/**
-	 * The player_control object which "owns" this output.  This
-	 * object is needed to signal command completion.
-	 */
-	struct player_control *player_control;
-
-	/**
 	 * The #music_chunk which is currently being played.  All
 	 * chunks before this one may be returned to the
 	 * #music_buffer, because they are not going to be used by
@@ -249,21 +247,5 @@ audio_output_command_is_finished(const struct audio_output *ao)
 {
 	return ao->command == AO_COMMAND_NONE;
 }
-
-struct audio_output *
-audio_output_new(const struct config_param *param,
-		 struct player_control *pc,
-		 GError **error_r);
-
-bool
-ao_base_init(struct audio_output *ao,
-	     const struct audio_output_plugin *plugin,
-	     const struct config_param *param, GError **error_r);
-
-void
-ao_base_finish(struct audio_output *ao);
-
-void
-audio_output_free(struct audio_output *ao);
 
 #endif

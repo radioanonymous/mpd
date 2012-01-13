@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,6 @@
 #include "playlist/m3u_playlist_plugin.h"
 #include "playlist/xspf_playlist_plugin.h"
 #include "playlist/lastfm_playlist_plugin.h"
-#include "playlist/despotify_playlist_plugin.h"
 #include "playlist/pls_playlist_plugin.h"
 #include "playlist/asx_playlist_plugin.h"
 #include "playlist/rss_playlist_plugin.h"
@@ -32,7 +31,7 @@
 #include "playlist/flac_playlist_plugin.h"
 #include "input_stream.h"
 #include "uri.h"
-#include "string_util.h"
+#include "utils.h"
 #include "conf.h"
 #include "glib_compat.h"
 #include "mpd_error.h"
@@ -48,9 +47,6 @@ static const struct playlist_plugin *const playlist_plugins[] = {
 	&pls_playlist_plugin,
 	&asx_playlist_plugin,
 	&rss_playlist_plugin,
-#ifdef ENABLE_DESPOTIFY
-	&despotify_playlist_plugin,
-#endif
 #ifdef ENABLE_LASTFM
 	&lastfm_playlist_plugin,
 #endif
@@ -119,8 +115,7 @@ playlist_list_global_finish(void)
 }
 
 static struct playlist_provider *
-playlist_list_open_uri_scheme(const char *uri, GMutex *mutex, GCond *cond,
-			      bool *tried)
+playlist_list_open_uri_scheme(const char *uri, bool *tried)
 {
 	char *scheme;
 	struct playlist_provider *playlist = NULL;
@@ -139,8 +134,7 @@ playlist_list_open_uri_scheme(const char *uri, GMutex *mutex, GCond *cond,
 		if (playlist_plugins_enabled[i] && plugin->open_uri != NULL &&
 		    plugin->schemes != NULL &&
 		    string_array_contains(plugin->schemes, scheme)) {
-			playlist = playlist_plugin_open_uri(plugin, uri,
-							    mutex, cond);
+			playlist = playlist_plugin_open_uri(plugin, uri);
 			if (playlist != NULL)
 				break;
 
@@ -153,8 +147,7 @@ playlist_list_open_uri_scheme(const char *uri, GMutex *mutex, GCond *cond,
 }
 
 static struct playlist_provider *
-playlist_list_open_uri_suffix(const char *uri, GMutex *mutex, GCond *cond,
-			      const bool *tried)
+playlist_list_open_uri_suffix(const char *uri, const bool *tried)
 {
 	const char *suffix;
 	struct playlist_provider *playlist = NULL;
@@ -171,8 +164,7 @@ playlist_list_open_uri_suffix(const char *uri, GMutex *mutex, GCond *cond,
 		if (playlist_plugins_enabled[i] && !tried[i] &&
 		    plugin->open_uri != NULL && plugin->suffixes != NULL &&
 		    string_array_contains(plugin->suffixes, suffix)) {
-			playlist = playlist_plugin_open_uri(plugin, uri,
-							    mutex, cond);
+			playlist = playlist_plugin_open_uri(plugin, uri);
 			if (playlist != NULL)
 				break;
 		}
@@ -182,7 +174,7 @@ playlist_list_open_uri_suffix(const char *uri, GMutex *mutex, GCond *cond,
 }
 
 struct playlist_provider *
-playlist_list_open_uri(const char *uri, GMutex *mutex, GCond *cond)
+playlist_list_open_uri(const char *uri)
 {
 	struct playlist_provider *playlist;
 	/** this array tracks which plugins have already been tried by
@@ -193,10 +185,9 @@ playlist_list_open_uri(const char *uri, GMutex *mutex, GCond *cond)
 
 	memset(tried, false, sizeof(tried));
 
-	playlist = playlist_list_open_uri_scheme(uri, mutex, cond, tried);
+	playlist = playlist_list_open_uri_scheme(uri, tried);
 	if (playlist == NULL)
-		playlist = playlist_list_open_uri_suffix(uri, mutex, cond,
-							 tried);
+		playlist = playlist_list_open_uri_suffix(uri, tried);
 
 	return playlist;
 }
@@ -283,7 +274,16 @@ playlist_list_open_stream(struct input_stream *is, const char *uri)
 	const char *suffix;
 	struct playlist_provider *playlist;
 
-	input_stream_lock_wait_ready(is);
+	GError *error = NULL;
+	while (!is->ready) {
+		int ret = input_stream_buffer(is, &error);
+		if (ret < 0) {
+			input_stream_close(is);
+			g_warning("%s", error->message);
+			g_error_free(error);
+			return NULL;
+		}
+	}
 
 	if (is->mime != NULL) {
 		playlist = playlist_list_open_stream_mime(is);
@@ -318,8 +318,7 @@ playlist_suffix_supported(const char *suffix)
 }
 
 struct playlist_provider *
-playlist_list_open_path(const char *path_fs, GMutex *mutex, GCond *cond,
-			struct input_stream **is_r)
+playlist_list_open_path(const char *path_fs, struct input_stream **is_r)
 {
 	GError *error = NULL;
 	const char *suffix;
@@ -332,7 +331,7 @@ playlist_list_open_path(const char *path_fs, GMutex *mutex, GCond *cond,
 	if (suffix == NULL || !playlist_suffix_supported(suffix))
 		return NULL;
 
-	is = input_stream_open(path_fs, mutex, cond, &error);
+	is = input_stream_open(path_fs, &error);
 	if (is == NULL) {
 		if (error != NULL) {
 			g_warning("%s", error->message);
@@ -342,7 +341,15 @@ playlist_list_open_path(const char *path_fs, GMutex *mutex, GCond *cond,
 		return NULL;
 	}
 
-	input_stream_lock_wait_ready(is);
+	while (!is->ready) {
+		int ret = input_stream_buffer(is, &error);
+		if (ret < 0) {
+			input_stream_close(is);
+			g_warning("%s", error->message);
+			g_error_free(error);
+			return NULL;
+		}
+	}
 
 	playlist = playlist_list_open_stream_suffix(is, suffix);
 	if (playlist != NULL)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #include "client_internal.h"
 #include "fd_util.h"
 #include "fifo_buffer.h"
-#include "resolver.h"
+#include "socket_util.h"
 #include "permission.h"
 #include "glib_socket.h"
 
@@ -43,15 +43,12 @@
 
 static const char GREETING[] = "OK MPD " PROTOCOL_VERSION "\n";
 
-void
-client_new(struct player_control *player_control,
-	   int fd, const struct sockaddr *sa, size_t sa_length, int uid)
+void client_new(int fd, const struct sockaddr *sa, size_t sa_length, int uid)
 {
 	static unsigned int next_client_num;
 	struct client *client;
 	char *remote;
 
-	assert(player_control != NULL);
 	assert(fd >= 0);
 
 #ifdef HAVE_LIBWRAP
@@ -86,7 +83,6 @@ client_new(struct player_control *player_control,
 	}
 
 	client = g_new0(struct client, 1);
-	client->player_control = player_control;
 
 	client->channel = g_io_channel_new_socket(fd);
 	/* GLib is responsible for closing the file descriptor */
@@ -118,10 +114,6 @@ client_new(struct player_control *player_control,
 	client->num = next_client_num++;
 
 	client->send_buf_used = 0;
-
-	client->subscriptions = NULL;
-	client->messages = NULL;
-	client->num_messages = 0;
 
 	(void)send(fd, GREETING, sizeof(GREETING) - 1, 0);
 

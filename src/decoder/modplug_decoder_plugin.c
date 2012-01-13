@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -62,7 +62,7 @@ static GByteArray *mod_loadfile(struct decoder *decoder, struct input_stream *is
 	while (true) {
 		ret = decoder_read(decoder, is, data, MODPLUG_READ_BLOCK);
 		if (ret == 0) {
-			if (input_stream_lock_eof(is))
+			if (input_stream_eof(is))
 				/* end of file */
 				break;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -75,8 +75,7 @@ playlist_finish(struct playlist *playlist)
  * Queue a song, addressed by its order number.
  */
 static void
-playlist_queue_song_order(struct playlist *playlist, struct player_control *pc,
-			  unsigned order)
+playlist_queue_song_order(struct playlist *playlist, unsigned order)
 {
 	struct song *song;
 	char *uri;
@@ -90,16 +89,16 @@ playlist_queue_song_order(struct playlist *playlist, struct player_control *pc,
 	g_debug("queue song %i:\"%s\"", playlist->queued, uri);
 	g_free(uri);
 
-	pc_enqueue_song(pc, song);
+	pc_enqueue_song(song);
 }
 
 /**
  * Called if the player thread has started playing the "queued" song.
  */
 static void
-playlist_song_started(struct playlist *playlist, struct player_control *pc)
+playlist_song_started(struct playlist *playlist)
 {
-	assert(pc->next_song == NULL);
+	assert(pc.next_song == NULL);
 	assert(playlist->queued >= -1);
 
 	/* queued song has started: copy queued to current,
@@ -111,13 +110,11 @@ playlist_song_started(struct playlist *playlist, struct player_control *pc)
 
 	/* Pause if we are in single mode. */
 	if(playlist->queue.single && !playlist->queue.repeat) {
-		pc_set_pause(pc, true);
+		pc_set_pause(true);
 	}
 
 	if(playlist->queue.consume)
-		playlist_delete(playlist, pc,
-				queue_order_to_position(&playlist->queue,
-							current));
+		playlist_delete(playlist, queue_order_to_position(&playlist->queue, current));
 
 	idle_add(IDLE_PLAYER);
 }
@@ -132,9 +129,7 @@ playlist_get_queued_song(struct playlist *playlist)
 }
 
 void
-playlist_update_queued_song(struct playlist *playlist,
-			    struct player_control *pc,
-			    const struct song *prev)
+playlist_update_queued_song(struct playlist *playlist, const struct song *prev)
 {
 	int next_order;
 	const struct song *next_song;
@@ -175,21 +170,20 @@ playlist_update_queued_song(struct playlist *playlist,
 
 	if (prev != NULL && next_song != prev) {
 		/* clear the currently queued song */
-		pc_cancel(pc);
+		pc_cancel();
 		playlist->queued = -1;
 	}
 
 	if (next_order >= 0) {
 		if (next_song != prev)
-			playlist_queue_song_order(playlist, pc, next_order);
+			playlist_queue_song_order(playlist, next_order);
 		else
 			playlist->queued = next_order;
 	}
 }
 
 void
-playlist_play_order(struct playlist *playlist, struct player_control *pc,
-		    int orderNum)
+playlist_play_order(struct playlist *playlist, int orderNum)
 {
 	struct song *song;
 	char *uri;
@@ -203,46 +197,46 @@ playlist_play_order(struct playlist *playlist, struct player_control *pc,
 	g_debug("play %i:\"%s\"", orderNum, uri);
 	g_free(uri);
 
-	pc_play(pc, song);
+	pc_play(song);
 	playlist->current = orderNum;
 }
 
 static void
-playlist_resume_playback(struct playlist *playlist, struct player_control *pc);
+playlist_resume_playback(struct playlist *playlist);
 
 /**
  * This is the "PLAYLIST" event handler.  It is invoked by the player
  * thread whenever it requests a new queued song, or when it exits.
  */
 void
-playlist_sync(struct playlist *playlist, struct player_control *pc)
+playlist_sync(struct playlist *playlist)
 {
 	if (!playlist->playing)
 		/* this event has reached us out of sync: we aren't
 		   playing anymore; ignore the event */
 		return;
 
-	player_lock(pc);
-	enum player_state pc_state = pc_get_state(pc);
-	const struct song *pc_next_song = pc->next_song;
-	player_unlock(pc);
+	player_lock();
+	enum player_state pc_state = pc_get_state();
+	const struct song *pc_next_song = pc.next_song;
+	player_unlock();
 
 	if (pc_state == PLAYER_STATE_STOP)
 		/* the player thread has stopped: check if playback
 		   should be restarted with the next song.  That can
 		   happen if the playlist isn't filling the queue fast
 		   enough */
-		playlist_resume_playback(playlist, pc);
+		playlist_resume_playback(playlist);
 	else {
 		/* check if the player thread has already started
 		   playing the queued song */
 		if (pc_next_song == NULL && playlist->queued != -1)
-			playlist_song_started(playlist, pc);
+			playlist_song_started(playlist);
 
 		/* make sure the queued song is always set (if
 		   possible) */
-		if (pc->next_song == NULL && playlist->queued < 0)
-			playlist_update_queued_song(playlist, pc, NULL);
+		if (pc.next_song == NULL && playlist->queued < 0)
+			playlist_update_queued_song(playlist, NULL);
 	}
 }
 
@@ -251,14 +245,14 @@ playlist_sync(struct playlist *playlist, struct player_control *pc)
  * decide whether to re-start playback
  */
 static void
-playlist_resume_playback(struct playlist *playlist, struct player_control *pc)
+playlist_resume_playback(struct playlist *playlist)
 {
 	enum player_error error;
 
 	assert(playlist->playing);
-	assert(pc_get_state(pc) == PLAYER_STATE_STOP);
+	assert(pc_get_state() == PLAYER_STATE_STOP);
 
-	error = pc_get_error(pc);
+	error = pc_get_error();
 	if (error == PLAYER_ERROR_NOERROR)
 		playlist->error_count = 0;
 	else
@@ -269,10 +263,10 @@ playlist_resume_playback(struct playlist *playlist, struct player_control *pc)
 	    playlist->error_count >= queue_length(&playlist->queue))
 		/* too many errors, or critical error: stop
 		   playback */
-		playlist_stop(playlist, pc);
+		playlist_stop(playlist);
 	else
 		/* continue playback at the next song */
-		playlist_next(playlist, pc);
+		playlist_next(playlist);
 }
 
 bool
@@ -300,8 +294,7 @@ playlist_get_consume(const struct playlist *playlist)
 }
 
 void
-playlist_set_repeat(struct playlist *playlist, struct player_control *pc,
-		    bool status)
+playlist_set_repeat(struct playlist *playlist, bool status)
 {
 	if (status == playlist->queue.repeat)
 		return;
@@ -310,7 +303,7 @@ playlist_set_repeat(struct playlist *playlist, struct player_control *pc,
 
 	/* if the last song is currently being played, the "next song"
 	   might change when repeat mode is toggled */
-	playlist_update_queued_song(playlist, pc,
+	playlist_update_queued_song(playlist,
 				    playlist_get_queued_song(playlist));
 
 	idle_add(IDLE_OPTIONS);
@@ -328,8 +321,7 @@ playlist_order(struct playlist *playlist)
 }
 
 void
-playlist_set_single(struct playlist *playlist, struct player_control *pc,
-		    bool status)
+playlist_set_single(struct playlist *playlist, bool status)
 {
 	if (status == playlist->queue.single)
 		return;
@@ -338,7 +330,7 @@ playlist_set_single(struct playlist *playlist, struct player_control *pc,
 
 	/* if the last song is currently being played, the "next song"
 	   might change when single mode is toggled */
-	playlist_update_queued_song(playlist, pc,
+	playlist_update_queued_song(playlist,
 				    playlist_get_queued_song(playlist));
 
 	idle_add(IDLE_OPTIONS);
@@ -355,8 +347,7 @@ playlist_set_consume(struct playlist *playlist, bool status)
 }
 
 void
-playlist_set_random(struct playlist *playlist, struct player_control *pc,
-		    bool status)
+playlist_set_random(struct playlist *playlist, bool status)
 {
 	const struct song *queued;
 
@@ -393,7 +384,7 @@ playlist_set_random(struct playlist *playlist, struct player_control *pc,
 	} else
 		playlist_order(playlist);
 
-	playlist_update_queued_song(playlist, pc, queued);
+	playlist_update_queued_song(playlist, queued);
 
 	idle_add(IDLE_OPTIONS);
 }

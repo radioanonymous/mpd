@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,6 @@
 #ifndef PLAYLIST_PRINT_H
 #define PLAYLIST_PRINT_H
 
-#include <glib.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -100,8 +99,7 @@ playlist_print_changes_position(struct client *client,
  * @return true on success, false if the playlist does not exist
  */
 bool
-spl_print(struct client *client, const char *name_utf8, bool detail,
-	  GError **error_r);
+spl_print(struct client *client, const char *name_utf8, bool detail);
 
 /**
  * Send the playlist file to the client.

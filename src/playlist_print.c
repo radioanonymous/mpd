@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,7 +23,6 @@
 #include "playlist_plugin.h"
 #include "playlist_any.h"
 #include "playlist_song.h"
-#include "playlist.h"
 #include "queue_print.h"
 #include "stored_playlist.h"
 #include "song_print.h"
@@ -117,12 +116,11 @@ playlist_print_changes_position(struct client *client,
 }
 
 bool
-spl_print(struct client *client, const char *name_utf8, bool detail,
-	  GError **error_r)
+spl_print(struct client *client, const char *name_utf8, bool detail)
 {
 	GPtrArray *list;
 
-	list = spl_load(name_utf8, error_r);
+	list = spl_load(name_utf8);
 	if (list == NULL)
 		return false;
 
@@ -155,7 +153,7 @@ playlist_provider_print(struct client *client, const char *uri,
 	char *base_uri = uri != NULL ? g_path_get_dirname(uri) : NULL;
 
 	while ((song = playlist_plugin_read(playlist)) != NULL) {
-		song = playlist_check_translate_song(song, base_uri, false);
+		song = playlist_check_translate_song(song, base_uri);
 		if (song == NULL)
 			continue;
 
@@ -171,26 +169,16 @@ playlist_provider_print(struct client *client, const char *uri,
 bool
 playlist_file_print(struct client *client, const char *uri, bool detail)
 {
-	GMutex *mutex = g_mutex_new();
-	GCond *cond = g_cond_new();
-
 	struct input_stream *is;
-	struct playlist_provider *playlist =
-		playlist_open_any(uri, mutex, cond, &is);
-	if (playlist == NULL) {
-		g_cond_free(cond);
-		g_mutex_free(mutex);
+	struct playlist_provider *playlist = playlist_open_any(uri, &is);
+	if (playlist == NULL)
 		return false;
-	}
 
 	playlist_provider_print(client, uri, playlist, detail);
 	playlist_plugin_close(playlist);
 
 	if (is != NULL)
 		input_stream_close(is);
-
-	g_cond_free(cond);
-	g_mutex_free(mutex);
 
 	return true;
 }

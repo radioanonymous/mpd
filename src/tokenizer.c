@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 
 #include "config.h"
 #include "tokenizer.h"
-#include "string_util.h"
 
 #include <stdbool.h>
 #include <assert.h>
@@ -73,7 +72,7 @@ tokenizer_next_word(char **input_p, GError **error_r)
 			/* a whitespace: the word ends here */
 			*input = 0;
 			/* skip all following spaces, too */
-			input = strchug_fast(input + 1);
+			input = g_strchug(input + 1);
 			break;
 		}
 
@@ -127,7 +126,7 @@ tokenizer_next_unquoted(char **input_p, GError **error_r)
 			/* a whitespace: the word ends here */
 			*input = 0;
 			/* skip all following spaces, too */
-			input = strchug_fast(input + 1);
+			input = g_strchug(input + 1);
 			break;
 		}
 
@@ -206,7 +205,7 @@ tokenizer_next_string(char **input_p, GError **error_r)
 	/* finish the string and return it */
 
 	*dest = 0;
-	*input_p = strchug_fast(input);
+	*input_p = g_strchug(input);
 	return word;
 }
 

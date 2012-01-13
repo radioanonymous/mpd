@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 #include "config.h"
 #include "archive_list.h"
 #include "archive_plugin.h"
-#include "string_util.h"
+#include "utils.h"
 #include "archive/bz2_archive_plugin.h"
 #include "archive/iso9660_archive_plugin.h"
 #include "archive/zzip_archive_plugin.h"

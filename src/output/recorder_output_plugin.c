@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
  */
 
 #include "config.h"
-#include "recorder_output_plugin.h"
 #include "output_api.h"
 #include "encoder_plugin.h"
 #include "encoder_list.h"
@@ -35,8 +34,6 @@
 #define G_LOG_DOMAIN "recorder"
 
 struct recorder_output {
-	struct audio_output base;
-
 	/**
 	 * The configured encoder plugin.
 	 */
@@ -67,16 +64,11 @@ recorder_output_quark(void)
 	return g_quark_from_static_string("recorder_output");
 }
 
-static struct audio_output *
-recorder_output_init(const struct config_param *param, GError **error_r)
+static void *
+recorder_output_init(G_GNUC_UNUSED const struct audio_format *audio_format,
+		     const struct config_param *param, GError **error_r)
 {
 	struct recorder_output *recorder = g_new(struct recorder_output, 1);
-	if (!ao_base_init(&recorder->base, &recorder_output_plugin, param,
-			  error_r)) {
-		g_free(recorder);
-		return NULL;
-	}
-
 	const char *encoder_name;
 	const struct encoder_plugin *encoder_plugin;
 
@@ -103,21 +95,19 @@ recorder_output_init(const struct config_param *param, GError **error_r)
 	if (recorder->encoder == NULL)
 		goto failure;
 
-	return &recorder->base;
+	return recorder;
 
 failure:
-	ao_base_finish(&recorder->base);
 	g_free(recorder);
 	return NULL;
 }
 
 static void
-recorder_output_finish(struct audio_output *ao)
+recorder_output_finish(void *data)
 {
-	struct recorder_output *recorder = (struct recorder_output *)ao;
+	struct recorder_output *recorder = data;
 
 	encoder_finish(recorder->encoder);
-	ao_base_finish(&recorder->base);
 	g_free(recorder);
 }
 
@@ -164,11 +154,10 @@ recorder_output_encoder_to_file(struct recorder_output *recorder,
 }
 
 static bool
-recorder_output_open(struct audio_output *ao,
-		     struct audio_format *audio_format,
+recorder_output_open(void *data, struct audio_format *audio_format,
 		     GError **error_r)
 {
-	struct recorder_output *recorder = (struct recorder_output *)ao;
+	struct recorder_output *recorder = data;
 	bool success;
 
 	/* create the output file */
@@ -196,9 +185,9 @@ recorder_output_open(struct audio_output *ao,
 }
 
 static void
-recorder_output_close(struct audio_output *ao)
+recorder_output_close(void *data)
 {
-	struct recorder_output *recorder = (struct recorder_output *)ao;
+	struct recorder_output *recorder = data;
 
 	/* flush the encoder and write the rest to the file */
 
@@ -213,10 +202,10 @@ recorder_output_close(struct audio_output *ao)
 }
 
 static size_t
-recorder_output_play(struct audio_output *ao, const void *chunk, size_t size,
+recorder_output_play(void *data, const void *chunk, size_t size,
 		     GError **error_r)
 {
-	struct recorder_output *recorder = (struct recorder_output *)ao;
+	struct recorder_output *recorder = data;
 
 	return encoder_write(recorder->encoder, chunk, size, error_r) &&
 		recorder_output_encoder_to_file(recorder, error_r)

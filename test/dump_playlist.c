@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
  */
 
 #include "config.h"
-#include "io_thread.h"
 #include "input_init.h"
 #include "input_stream.h"
 #include "tag_pool.h"
@@ -31,7 +30,6 @@
 #include <glib.h>
 
 #include <unistd.h>
-#include <stdlib.h>
 
 static void
 my_log_func(const gchar *log_domain, G_GNUC_UNUSED GLogLevelFlags log_level,
@@ -75,13 +73,6 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	io_thread_init();
-	if (!io_thread_start(&error)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-		return EXIT_FAILURE;
-	}
-
 	if (!input_stream_global_init(&error)) {
 		g_warning("%s", error->message);
 		g_error_free(error);
@@ -92,14 +83,11 @@ int main(int argc, char **argv)
 
 	/* open the playlist */
 
-	GMutex *mutex = g_mutex_new();
-	GCond *cond = g_cond_new();
-
-	playlist = playlist_list_open_uri(uri, mutex, cond);
+	playlist = playlist_list_open_uri(uri);
 	if (playlist == NULL) {
 		/* open the stream and wait until it becomes ready */
 
-		is = input_stream_open(uri, mutex, cond, &error);
+		is = input_stream_open(uri, &error);
 		if (is == NULL) {
 			if (error != NULL) {
 				g_warning("%s", error->message);
@@ -109,7 +97,19 @@ int main(int argc, char **argv)
 			return 2;
 		}
 
-		input_stream_lock_wait_ready(is);
+		while (!is->ready) {
+			int ret = input_stream_buffer(is, &error);
+			if (ret < 0) {
+				/* error */
+				g_warning("%s", error->message);
+				g_error_free(error);
+				return 2;
+			}
+
+			if (ret == 0)
+				/* nothing was buffered - wait */
+				g_usleep(10000);
+		}
 
 		/* open the playlist */
 
@@ -148,13 +148,8 @@ int main(int argc, char **argv)
 	playlist_plugin_close(playlist);
 	if (is != NULL)
 		input_stream_close(is);
-
-	g_cond_free(cond);
-	g_mutex_free(mutex);
-
 	playlist_list_global_finish();
 	input_stream_global_finish();
-	io_thread_deinit();
 	config_global_finish();
 	tag_pool_deinit();
 

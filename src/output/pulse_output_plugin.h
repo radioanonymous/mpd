@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,20 +21,43 @@
 #define MPD_PULSE_OUTPUT_PLUGIN_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include <glib.h>
 
-struct pulse_output;
-struct pulse_mixer;
+#include <pulse/version.h>
+
+#if !defined(PA_CHECK_VERSION)
+/**
+ * This macro was implemented in libpulse 0.9.16.
+ */
+#define PA_CHECK_VERSION(a,b,c) false
+#endif
+
+struct pa_operation;
 struct pa_cvolume;
 
-extern const struct audio_output_plugin pulse_output_plugin;
+struct pulse_output {
+	const char *name;
+	const char *server;
+	const char *sink;
 
-void
-pulse_output_lock(struct pulse_output *po);
+	struct pulse_mixer *mixer;
 
-void
-pulse_output_unlock(struct pulse_output *po);
+	struct pa_threaded_mainloop *mainloop;
+	struct pa_context *context;
+	struct pa_stream *stream;
+
+	size_t writable;
+
+#if !PA_CHECK_VERSION(0,9,11)
+	/**
+	 * We need this variable because pa_stream_is_corked() wasn't
+	 * added before 0.9.11.
+	 */
+	bool pause;
+#endif
+};
 
 void
 pulse_output_set_mixer(struct pulse_output *po, struct pulse_mixer *pm);

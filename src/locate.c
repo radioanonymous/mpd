@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -62,6 +62,19 @@ locate_item_init(struct locate_item *item,
 	item->needle = g_strdup(needle);
 
 	return true;
+}
+
+struct locate_item *
+locate_item_new(const char *type_string, const char *needle)
+{
+	struct locate_item *ret = g_new(struct locate_item, 1);
+
+	if (!locate_item_init(ret, type_string, needle)) {
+		g_free(ret);
+		ret = NULL;
+	}
+
+	return ret;
 }
 
 void

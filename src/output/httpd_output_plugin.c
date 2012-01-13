@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,13 +18,12 @@
  */
 
 #include "config.h"
-#include "httpd_output_plugin.h"
 #include "httpd_internal.h"
 #include "httpd_client.h"
 #include "output_api.h"
 #include "encoder_plugin.h"
 #include "encoder_list.h"
-#include "resolver.h"
+#include "socket_util.h"
 #include "page.h"
 #include "icy_server.h"
 #include "fd_util.h"
@@ -79,16 +78,12 @@ httpd_output_unbind(struct httpd_output *httpd)
 	g_mutex_unlock(httpd->mutex);
 }
 
-static struct audio_output *
-httpd_output_init(const struct config_param *param,
+static void *
+httpd_output_init(G_GNUC_UNUSED const struct audio_format *audio_format,
+		  const struct config_param *param,
 		  GError **error)
 {
 	struct httpd_output *httpd = g_new(struct httpd_output, 1);
-	if (!ao_base_init(&httpd->base, &httpd_output_plugin, param, error)) {
-		g_free(httpd);
-		return NULL;
-	}
-
 	const char *encoder_name, *bind_to_address;
 	const struct encoder_plugin *encoder_plugin;
 	guint port;
@@ -108,7 +103,6 @@ httpd_output_init(const struct config_param *param,
 	if (encoder_plugin == NULL) {
 		g_set_error(error, httpd_output_quark(), 0,
 			    "No such encoder: %s", encoder_name);
-		ao_base_finish(&httpd->base);
 		g_free(httpd);
 		return NULL;
 	}
@@ -126,11 +120,8 @@ httpd_output_init(const struct config_param *param,
 		? server_socket_add_host(httpd->server_socket, bind_to_address,
 					 port, error)
 		: server_socket_add_port(httpd->server_socket, port, error);
-	if (!success) {
-		ao_base_finish(&httpd->base);
-		g_free(httpd);
+	if (!success)
 		return NULL;
-	}
 
 	/* initialize metadata */
 	httpd->metadata = NULL;
@@ -139,11 +130,8 @@ httpd_output_init(const struct config_param *param,
 	/* initialize encoder */
 
 	httpd->encoder = encoder_init(encoder_plugin, param, error);
-	if (httpd->encoder == NULL) {
-		ao_base_finish(&httpd->base);
-		g_free(httpd);
+	if (httpd->encoder == NULL)
 		return NULL;
-	}
 
 	/* determine content type */
 	httpd->content_type = encoder_get_mime_type(httpd->encoder);
@@ -153,13 +141,13 @@ httpd_output_init(const struct config_param *param,
 
 	httpd->mutex = g_mutex_new();
 
-	return &httpd->base;
+	return httpd;
 }
 
 static void
-httpd_output_finish(struct audio_output *ao)
+httpd_output_finish(void *data)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	if (httpd->metadata)
 		page_unref(httpd->metadata);
@@ -167,7 +155,6 @@ httpd_output_finish(struct audio_output *ao)
 	encoder_finish(httpd->encoder);
 	server_socket_free(httpd->server_socket);
 	g_mutex_free(httpd->mutex);
-	ao_base_finish(&httpd->base);
 	g_free(httpd);
 }
 
@@ -299,26 +286,26 @@ httpd_output_encoder_open(struct httpd_output *httpd,
 }
 
 static bool
-httpd_output_enable(struct audio_output *ao, GError **error_r)
+httpd_output_enable(void *data, GError **error_r)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	return httpd_output_bind(httpd, error_r);
 }
 
 static void
-httpd_output_disable(struct audio_output *ao)
+httpd_output_disable(void *data)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	httpd_output_unbind(httpd);
 }
 
 static bool
-httpd_output_open(struct audio_output *ao, struct audio_format *audio_format,
+httpd_output_open(void *data, struct audio_format *audio_format,
 		  GError **error)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 	bool success;
 
 	g_mutex_lock(httpd->mutex);
@@ -351,10 +338,9 @@ httpd_client_delete(gpointer data, G_GNUC_UNUSED gpointer user_data)
 	httpd_client_free(client);
 }
 
-static void
-httpd_output_close(struct audio_output *ao)
+static void httpd_output_close(void *data)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	g_mutex_lock(httpd->mutex);
 
@@ -393,9 +379,9 @@ httpd_output_send_header(struct httpd_output *httpd,
 }
 
 static unsigned
-httpd_output_delay(struct audio_output *ao)
+httpd_output_delay(void *data)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	return httpd->timer->started
 		? timer_delay(httpd->timer)
@@ -471,10 +457,9 @@ httpd_output_encode_and_play(struct httpd_output *httpd,
 }
 
 static size_t
-httpd_output_play(struct audio_output *ao, const void *chunk, size_t size,
-		  GError **error)
+httpd_output_play(void *data, const void *chunk, size_t size, GError **error)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 	bool has_clients;
 
 	g_mutex_lock(httpd->mutex);
@@ -498,9 +483,9 @@ httpd_output_play(struct audio_output *ao, const void *chunk, size_t size,
 }
 
 static bool
-httpd_output_pause(struct audio_output *ao)
+httpd_output_pause(void *data)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	g_mutex_lock(httpd->mutex);
 	bool has_clients = httpd->clients != NULL;
@@ -508,7 +493,7 @@ httpd_output_pause(struct audio_output *ao)
 
 	if (has_clients) {
 		static const char silence[1020];
-		return httpd_output_play(ao, silence, sizeof(silence),
+		return httpd_output_play(data, silence, sizeof(silence),
 					 NULL) > 0;
 	} else {
 		g_usleep(100000);
@@ -526,9 +511,9 @@ httpd_send_metadata(gpointer data, gpointer user_data)
 }
 
 static void
-httpd_output_tag(struct audio_output *ao, const struct tag *tag)
+httpd_output_tag(void *data, const struct tag *tag)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	assert(tag != NULL);
 
@@ -585,9 +570,9 @@ httpd_client_cancel_callback(gpointer data, G_GNUC_UNUSED gpointer user_data)
 }
 
 static void
-httpd_output_cancel(struct audio_output *ao)
+httpd_output_cancel(void *data)
 {
-	struct httpd_output *httpd = (struct httpd_output *)ao;
+	struct httpd_output *httpd = data;
 
 	g_mutex_lock(httpd->mutex);
 	g_list_foreach(httpd->clients, httpd_client_cancel_callback, NULL);

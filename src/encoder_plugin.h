@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -80,7 +80,7 @@ encoder_struct_init(struct encoder *encoder,
  *
  * @param plugin the encoder plugin
  * @param param optional configuration
- * @param error location to store the error occurring, or NULL to ignore errors.
+ * @param error location to store the error occuring, or NULL to ignore errors.
  * @return an encoder object on success, NULL on failure
  */
 static inline struct encoder *
@@ -109,7 +109,7 @@ encoder_finish(struct encoder *encoder)
  * @param encoder the encoder
  * @param audio_format the encoder's input audio format; the plugin
  * may modify the struct to adapt it to its abilities
- * @param error location to store the error occurring, or NULL to ignore errors.
+ * @param error location to store the error occuring, or NULL to ignore errors.
  * @return true on success
  */
 static inline bool
@@ -137,7 +137,7 @@ encoder_close(struct encoder *encoder)
  * buffered available by encoder_read().
  *
  * @param encoder the encoder
- * @param error location to store the error occurring, or NULL to ignore errors.
+ * @param error location to store the error occuring, or NULL to ignore errors.
  * @return true on success
  */
 static inline bool
@@ -176,7 +176,7 @@ encoder_pre_tag(struct encoder *encoder, GError **error)
  *
  * @param encoder the encoder
  * @param tag the tag object
- * @param error location to store the error occurring, or NULL to ignore errors.
+ * @param error location to store the error occuring, or NULL to ignore errors.
  * @return true on success
  */
 static inline bool
@@ -194,7 +194,7 @@ encoder_tag(struct encoder *encoder, const struct tag *tag, GError **error)
  * @param encoder the encoder
  * @param data the buffer containing PCM samples
  * @param length the length of the buffer in bytes
- * @param error location to store the error occurring, or NULL to ignore errors.
+ * @param error location to store the error occuring, or NULL to ignore errors.
  * @return true on success
  */
 static inline bool

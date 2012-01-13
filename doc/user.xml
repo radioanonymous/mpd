@@ -236,16 +236,6 @@ cd mpd-version</programlisting>
     </section>
 
     <section>
-      <title>Configuring encoder plugins</title>
-
-      <para>
-        Encoders are used by some of the output plugins (such as
-        <varname>shout</varname>).  The encoder settings are included
-        in the <varname>audio_output</varname> section.
-      </para>
-    </section>
-
-    <section>
       <title>Configuring audio outputs</title>
 
       <para>
@@ -332,8 +322,7 @@ cd mpd-version</programlisting>
                   <varname>24_3</varname> (signed 24 bit integer
                   samples, no padding, 3 bytes per sample),
                   <varname>32</varname> (signed 32 bit integer
-                  samples), <varname>f</varname> (32 bit floating
-                  point, -1.0 to 1.0).
+                  samples).
                 </para>
               </entry>
             </row>
@@ -357,7 +346,7 @@ cd mpd-version</programlisting>
                 If set to "yes", then MPD attempts to keep this audio
                 output always open.  This may be useful for streaming
                 servers, when you don't want to disconnect all
-                listeners even when playback is accidentally stopped.
+                listeners even when playback is accidently stopped.
               </entry>
             </row>
             <row>
@@ -632,141 +621,10 @@ cd mpd-version</programlisting>
           Plays streams with the MMS protocol.
         </para>
       </section>
-
-      <section>
-        <title><varname>cdio_paranoia</varname></title>
-
-        <para>
-          Plays audio CDs.  The URI has the form:
-          "<filename>cdda://[DEVICE][/TRACK]</filename>".  The
-          simplest form <filename>cdda://</filename> plays the whole
-          disc in the default drive.
-        </para>
-      </section>
-
-      <section>
-        <title><varname>despotify</varname></title>
-
-        <para>
-          Plays <ulink url="http://www.spotify.com">Spotify</ulink> tracks using the despotify
-          library. The despotify plugin uses a <filename>spt://</filename> URI and a Spotify
-          URL. So for example, you can add a song with:
-        </para>
-        
-        <para>
-          <filename>mpc add spt://spotify:track:5qENVY0YEdZ7fiuOax70x1</filename>
-        </para>
-        
-        <para>
-          You need a Spotify premium account to use this plugin, and you need
-          to setup username and password in the configuration file. The
-          configuration settings are global since the despotify playlist plugin
-          use the same settings.
-        </para>
-
-        <informaltable>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Setting</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>
-                  <varname>despotify_user</varname>
-                </entry>
-                <entry>
-                  Sets up the Spotify username (required)
-                </entry>
-              </row>
-              <row>
-                <entry>
-                  <varname>despotify_password</varname>
-                </entry>
-                <entry>
-                  Sets up the Spotify password (required)
-                </entry>
-              </row>
-              <row>
-                <entry>
-                  <varname>despotify_high_bitrate</varname>
-                </entry>
-                <entry>
-                  Set up if high bitrate should be used for Spotify tunes.
-                  High bitrate sounds better but slow systems can have problems
-                  with playback (default yes).
-                </entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </informaltable>
-      </section>
-
-      <section>
-        <title><varname>soup</varname></title>
-
-        <para>
-          Opens remote files or streams over HTTP.
-        </para>
-
-        <informaltable>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Setting</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>
-                  <varname>proxy</varname>
-                </entry>
-                <entry>
-                  Sets the address of the HTTP proxy server.
-                </entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </informaltable>
-      </section>
     </section>
 
     <section>
       <title>Decoder plugins</title>
-
-      <section>
-        <title><varname>dsdiff</varname></title>
-
-        <para>
-          Decodes DFF files containing DSDIFF data (e.g. SACD rips).
-        </para>
-
-        <informaltable>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Setting</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>
-                  <varname>lsbitfirst</varname>
-                  <parameter>yes|no</parameter>
-                </entry>
-                <entry>
-                  Decode the least significant bit first.  Default is
-                  "no".
-                </entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </informaltable>
-      </section>
 
       <section>
         <title><varname>mikmod</varname></title>
@@ -796,178 +654,6 @@ cd mpd-version</programlisting>
             </tbody>
           </tgroup>
         </informaltable>
-      </section>
-    </section>
-
-    <section>
-      <title>Encoder plugins</title>
-
-      <section>
-        <title><varname>flac</varname></title>
-
-        <para>
-          Encodes into FLAC (lossless).
-        </para>
-
-        <informaltable>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Setting</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>
-                  <varname>compression</varname>
-                </entry>
-                <entry>
-                  Sets the <filename>libFLAC</filename> compression
-                  level.  The levels range from 0 (fastest, least
-                  compression) to 8 (slowest, most compression).
-                </entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </informaltable>
-      </section>
-
-      <section>
-        <title><varname>lame</varname></title>
-
-        <para>
-          Encodes into MP3 using the LAME library.
-        </para>
-
-        <informaltable>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Setting</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>
-                  <varname>quality</varname>
-                </entry>
-                <entry>
-                  Sets the quality for VBR.  0 is the highest quality,
-                  9 is the lowest quality.  Cannot be used with
-                  <varname>bitrate</varname>.
-                </entry>
-              </row>
-              <row>
-                <entry>
-                  <varname>bitrate</varname>
-                </entry>
-                <entry>
-                  Sets the bit rate in kilobit per second.  Cannot be
-                  used with <varname>quality</varname>.
-                </entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </informaltable>
-      </section>
-
-      <section>
-        <title><varname>null</varname></title>
-
-        <para>
-          Does not encode anything, passes the input PCM data as-is.
-        </para>
-      </section>
-
-      <section>
-        <title><varname>twolame</varname></title>
-
-        <para>
-          Encodes into MP2 using the <filename>twolame</filename>
-          library.
-        </para>
-
-        <informaltable>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Setting</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>
-                  <varname>quality</varname>
-                </entry>
-                <entry>
-                  Sets the quality for VBR.  0 is the highest quality,
-                  9 is the lowest quality.  Cannot be used with
-                  <varname>bitrate</varname>.
-                </entry>
-              </row>
-              <row>
-                <entry>
-                  <varname>bitrate</varname>
-                </entry>
-                <entry>
-                  Sets the bit rate in kilobit per second.  Cannot be
-                  used with <varname>quality</varname>.
-                </entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </informaltable>
-      </section>
-
-      <section>
-        <title><varname>vorbis</varname></title>
-
-        <para>
-          Encodes into Ogg Vorbis.
-        </para>
-
-        <informaltable>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Setting</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>
-                  <varname>quality</varname>
-                </entry>
-                <entry>
-                  Sets the quality for VBR.  -1 is the lowest quality,
-                  10 is the highest quality.  Cannot be used with
-                  <varname>bitrate</varname>.
-                </entry>
-              </row>
-              <row>
-                <entry>
-                  <varname>bitrate</varname>
-                </entry>
-                <entry>
-                  Sets the bit rate in kilobit per second.  Cannot be
-                  used with <varname>quality</varname>.
-                </entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </informaltable>
-      </section>
-
-      <section>
-        <title><varname>wave</varname></title>
-
-        <para>
-          Encodes into WAV (lossless).
-        </para>
       </section>
     </section>
 
@@ -1680,15 +1366,6 @@ cd mpd-version</programlisting>
               </row>
               <row>
                 <entry>
-                  <varname>url</varname>
-                  <parameter>URL</parameter>
-                </entry>
-                <entry>
-                  Sets a URL associated with the stream (optional).
-                </entry>
-              </row>
-              <row>
-                <entry>
                   <varname>public</varname>
                   <parameter>yes|no</parameter>
                 </entry>
@@ -1821,27 +1498,6 @@ cd mpd-version</programlisting>
           playlist files.
         </para>
       </section>
-
-      <section>
-        <title><varname>despotify</varname></title>
-
-        <para>
-          Adds <ulink url="http://www.spotify.com/">Spotify</ulink>
-          playlists. Spotify playlists use the <filename>spt://</filename> URI,
-          and a Spotify playlist URL. So for example, you can load a playlist
-          with
-        </para>
-        
-        <para>
-          <filename>mpc load spt://spotify:user:simon.kagstrom:playlist:3SUwkOe5VbVHysZcidEZtH</filename>
-        </para>
-        
-        <para>
-          See the despotify input plugin for configuration options (username
-          and password needs to be setup)
-        </para>
-      </section>
-
     </section>
   </chapter>
 </book>

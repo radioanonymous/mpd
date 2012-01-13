@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,7 +25,6 @@
 #ifndef MPD_OUTPUT_HTTPD_INTERNAL_H
 #define MPD_OUTPUT_HTTPD_INTERNAL_H
 
-#include "output_internal.h"
 #include "timer.h"
 
 #include <glib.h>
@@ -35,8 +34,6 @@
 struct httpd_client;
 
 struct httpd_output {
-	struct audio_output base;
-
 	/**
 	 * True if the audio output is open and accepts client
 	 * connections.
@@ -68,10 +65,10 @@ struct httpd_output {
 	GMutex *mutex;
 
 	/**
-	 * A #timer object to synchronize this output with the
+	 * A #Timer object to synchronize this output with the
 	 * wallclock.
 	 */
-	struct timer *timer;
+	Timer *timer;
 
 	/**
 	 * The listener socket.

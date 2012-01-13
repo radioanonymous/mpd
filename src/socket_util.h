@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,6 +31,19 @@
 struct sockaddr;
 
 /**
+ * Converts the specified socket address into a string in the form
+ * "IP:PORT".  The return value must be freed with g_free() when you
+ * don't need it anymore.
+ *
+ * @param sa the sockaddr struct
+ * @param length the length of #sa in bytes
+ * @param error location to store the error occuring, or NULL to
+ * ignore errors
+ */
+char *
+sockaddr_to_string(const struct sockaddr *sa, size_t length, GError **error);
+
+/**
  * Creates a socket listening on the specified address.  This is a
  * shortcut for socket(), bind() and listen().
  *
@@ -40,7 +53,7 @@ struct sockaddr;
  * @param address the address to listen on
  * @param address_length the size of #address
  * @param backlog the backlog parameter for the listen() system call
- * @param error location to store the error occurring, or NULL to
+ * @param error location to store the error occuring, or NULL to
  * ignore errors
  * @return the socket file descriptor or -1 on error
  */
@@ -49,8 +62,5 @@ socket_bind_listen(int domain, int type, int protocol,
 		   const struct sockaddr *address, size_t address_length,
 		   int backlog,
 		   GError **error);
-
-int
-socket_keepalive(int fd);
 
 #endif

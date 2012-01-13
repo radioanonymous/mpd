@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -38,11 +38,6 @@ enum {
 
 struct notify audio_output_client_notify;
 
-/**
- * Waits for command completion.
- *
- * @param ao the #audio_output instance; must be locked
- */
 static void ao_command_wait(struct audio_output *ao)
 {
 	while (ao->command != AO_COMMAND_NONE) {
@@ -52,43 +47,20 @@ static void ao_command_wait(struct audio_output *ao)
 	}
 }
 
-/**
- * Sends a command to the #audio_output object, but does not wait for
- * completion.
- *
- * @param ao the #audio_output instance; must be locked
- */
+static void ao_command(struct audio_output *ao, enum audio_output_command cmd)
+{
+	assert(ao->command == AO_COMMAND_NONE);
+	ao->command = cmd;
+	g_cond_signal(ao->cond);
+	ao_command_wait(ao);
+}
+
 static void ao_command_async(struct audio_output *ao,
 			     enum audio_output_command cmd)
 {
 	assert(ao->command == AO_COMMAND_NONE);
 	ao->command = cmd;
 	g_cond_signal(ao->cond);
-}
-
-/**
- * Sends a command to the #audio_output object and waits for
- * completion.
- *
- * @param ao the #audio_output instance; must be locked
- */
-static void
-ao_command(struct audio_output *ao, enum audio_output_command cmd)
-{
-	ao_command_async(ao, cmd);
-	ao_command_wait(ao);
-}
-
-/**
- * Lock the #audio_output object and execute the command
- * synchronously.
- */
-static void
-ao_lock_command(struct audio_output *ao, enum audio_output_command cmd)
-{
-	g_mutex_lock(ao->mutex);
-	ao_command(ao, cmd);
-	g_mutex_unlock(ao->mutex);
 }
 
 void
@@ -106,7 +78,9 @@ audio_output_enable(struct audio_output *ao)
 		audio_output_thread_start(ao);
 	}
 
-	ao_lock_command(ao, AO_COMMAND_ENABLE);
+	g_mutex_lock(ao->mutex);
+	ao_command(ao, AO_COMMAND_ENABLE);
+	g_mutex_unlock(ao->mutex);
 }
 
 void
@@ -123,7 +97,9 @@ audio_output_disable(struct audio_output *ao)
 		return;
 	}
 
-	ao_lock_command(ao, AO_COMMAND_DISABLE);
+	g_mutex_lock(ao->mutex);
+	ao_command(ao, AO_COMMAND_DISABLE);
+	g_mutex_unlock(ao->mutex);
 }
 
 /**
@@ -326,11 +302,28 @@ void audio_output_finish(struct audio_output *ao)
 	assert(ao->fail_timer == NULL);
 
 	if (ao->thread != NULL) {
+		g_mutex_lock(ao->mutex);
 		assert(ao->allow_play);
-		ao_lock_command(ao, AO_COMMAND_KILL);
+		ao_command(ao, AO_COMMAND_KILL);
+		g_mutex_unlock(ao->mutex);
 		g_thread_join(ao->thread);
-		ao->thread = NULL;
 	}
 
-	audio_output_free(ao);
+	if (ao->mixer != NULL)
+		mixer_free(ao->mixer);
+
+	ao_plugin_finish(ao->plugin, ao->data);
+
+	g_cond_free(ao->cond);
+	g_mutex_free(ao->mutex);
+
+	if (ao->replay_gain_filter != NULL)
+		filter_free(ao->replay_gain_filter);
+
+	if (ao->other_replay_gain_filter != NULL)
+		filter_free(ao->other_replay_gain_filter);
+
+	filter_free(ao->filter);
+
+	pcm_buffer_deinit(&ao->cross_fade_buffer);
 }

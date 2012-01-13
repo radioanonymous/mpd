@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 
 #include "config.h"
 #include "input/mms_input_plugin.h"
-#include "input_internal.h"
 #include "input_plugin.h"
 
 #include <glib.h>
@@ -46,9 +45,7 @@ mms_quark(void)
 }
 
 static struct input_stream *
-input_mms_open(const char *url,
-	       GMutex *mutex, GCond *cond,
-	       GError **error_r)
+input_mms_open(const char *url, GError **error_r)
 {
 	struct input_mms *m;
 
@@ -59,8 +56,7 @@ input_mms_open(const char *url,
 		return NULL;
 
 	m = g_new(struct input_mms, 1);
-	input_stream_init(&m->base, &input_plugin_mms, url,
-			  mutex, cond);
+	input_stream_init(&m->base, &input_plugin_mms, url);
 
 	m->mms = mmsx_connect(NULL, NULL, url, 128 * 1024);
 	if (m->mms == NULL) {

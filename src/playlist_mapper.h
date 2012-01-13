@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,8 +20,6 @@
 #ifndef MPD_PLAYLIST_MAPPER_H
 #define MPD_PLAYLIST_MAPPER_H
 
-#include <glib.h>
-
 struct input_stream;
 
 /**
@@ -33,7 +31,6 @@ struct input_stream;
  * freed
  */
 struct playlist_provider *
-playlist_mapper_open(const char *uri, GMutex *mutex, GCond *cond,
-		     struct input_stream **is_r);
+playlist_mapper_open(const char *uri, struct input_stream **is_r);
 
 #endif

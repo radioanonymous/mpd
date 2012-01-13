@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,6 @@
 #define MPD_INPUT_STREAM_H
 
 #include "check.h"
-#include "gcc.h"
 
 #include <glib.h>
 
@@ -44,26 +43,6 @@ struct input_stream {
 	 * be NULL if this is unknown.
 	 */
 	char *uri;
-
-	/**
-	 * A mutex that protects the mutable attributes of this object
-	 * and its implementation.  It must be locked before calling
-	 * any of the public methods.
-	 *
-	 * This object is allocated by the client, and the client is
-	 * responsible for freeing it.
-	 */
-	GMutex *mutex;
-
-	/**
-	 * A cond that gets signalled when the state of this object
-	 * changes from the I/O thread.  The client of this object may
-	 * wait on it.  Optional, may be NULL.
-	 *
-	 * This object is allocated by the client, and the client is
-	 * responsible for freeing it.
-	 */
-	GCond *cond;
 
 	/**
 	 * indicates whether the stream is ready for reading and
@@ -92,180 +71,88 @@ struct input_stream {
 	char *mime;
 };
 
+static inline void
+input_stream_init(struct input_stream *is, const struct input_plugin *plugin,
+		  const char *uri)
+{
+	is->plugin = plugin;
+	is->uri = g_strdup(uri);
+	is->ready = false;
+	is->seekable = false;
+	is->size = -1;
+	is->offset = 0;
+	is->mime = NULL;
+}
+
+static inline void
+input_stream_deinit(struct input_stream *is)
+{
+	g_free(is->uri);
+	g_free(is->mime);
+}
+
 /**
  * Opens a new input stream.  You may not access it until the "ready"
  * flag is set.
  *
- * @param mutex a mutex that is used to protect this object; must be
- * locked before calling any of the public methods
- * @param cond a cond that gets signalled when the state of
- * this object changes; may be NULL if the caller doesn't want to get
- * notifications
  * @return an #input_stream object on success, NULL on error
  */
-gcc_nonnull(1, 2)
-G_GNUC_MALLOC
 struct input_stream *
-input_stream_open(const char *uri,
-		  GMutex *mutex, GCond *cond,
-		  GError **error_r);
+input_stream_open(const char *uri, GError **error_r);
 
 /**
  * Close the input stream and free resources.
- *
- * The caller must not lock the mutex.
  */
-gcc_nonnull(1)
 void
 input_stream_close(struct input_stream *is);
-
-gcc_nonnull(1)
-static inline void
-input_stream_lock(struct input_stream *is)
-{
-	g_mutex_lock(is->mutex);
-}
-
-gcc_nonnull(1)
-static inline void
-input_stream_unlock(struct input_stream *is)
-{
-	g_mutex_unlock(is->mutex);
-}
-
-/**
- * Check for errors that may have occurred in the I/O thread.
- *
- * @return false on error
- */
-gcc_nonnull(1)
-bool
-input_stream_check(struct input_stream *is, GError **error_r);
-
-/**
- * Update the public attributes.  Call before accessing attributes
- * such as "ready" or "offset".
- */
-gcc_nonnull(1)
-void
-input_stream_update(struct input_stream *is);
-
-/**
- * Wait until the stream becomes ready.
- *
- * The caller must lock the mutex.
- */
-gcc_nonnull(1)
-void
-input_stream_wait_ready(struct input_stream *is);
-
-/**
- * Wrapper for input_stream_wait_locked() which locks and unlocks the
- * mutex; the caller must not be holding it already.
- */
-gcc_nonnull(1)
-void
-input_stream_lock_wait_ready(struct input_stream *is);
 
 /**
  * Seeks to the specified position in the stream.  This will most
  * likely fail if the "seekable" flag is false.
  *
- * The caller must lock the mutex.
- *
  * @param is the input_stream object
  * @param offset the relative offset
  * @param whence the base of the seek, one of SEEK_SET, SEEK_CUR, SEEK_END
  */
-gcc_nonnull(1)
 bool
 input_stream_seek(struct input_stream *is, goffset offset, int whence,
 		  GError **error_r);
 
 /**
- * Wrapper for input_stream_seek() which locks and unlocks the
- * mutex; the caller must not be holding it already.
- */
-gcc_nonnull(1)
-bool
-input_stream_lock_seek(struct input_stream *is, goffset offset, int whence,
-		       GError **error_r);
-
-/**
  * Returns true if the stream has reached end-of-file.
- *
- * The caller must lock the mutex.
  */
-gcc_nonnull(1)
-G_GNUC_PURE
 bool input_stream_eof(struct input_stream *is);
-
-/**
- * Wrapper for input_stream_eof() which locks and unlocks the mutex;
- * the caller must not be holding it already.
- */
-gcc_nonnull(1)
-G_GNUC_PURE
-bool
-input_stream_lock_eof(struct input_stream *is);
 
 /**
  * Reads the tag from the stream.
  *
- * The caller must lock the mutex.
- *
  * @return a tag object which must be freed with tag_free(), or NULL
  * if the tag has not changed since the last call
  */
-gcc_nonnull(1)
-G_GNUC_MALLOC
 struct tag *
 input_stream_tag(struct input_stream *is);
 
 /**
- * Wrapper for input_stream_tag() which locks and unlocks the
- * mutex; the caller must not be holding it already.
- */
-gcc_nonnull(1)
-G_GNUC_MALLOC
-struct tag *
-input_stream_lock_tag(struct input_stream *is);
-
-/**
- * Returns true if the next read operation will not block: either data
- * is available, or end-of-stream has been reached, or an error has
- * occurred.
+ * Reads some of the stream into its buffer.  The following return
+ * codes are defined: -1 = error, 1 = something was buffered, 0 =
+ * nothing was buffered.
  *
- * The caller must lock the mutex.
+ * The semantics of this function are not well-defined, and it will
+ * eventually be removed.
  */
-gcc_nonnull(1)
-G_GNUC_PURE
-bool
-input_stream_available(struct input_stream *is);
+int input_stream_buffer(struct input_stream *is, GError **error_r);
 
 /**
  * Reads data from the stream into the caller-supplied buffer.
  * Returns 0 on error or eof (check with input_stream_eof()).
- *
- * The caller must lock the mutex.
  *
  * @param is the input_stream object
  * @param ptr the buffer to read into
  * @param size the maximum number of bytes to read
  * @return the number of bytes read
  */
-gcc_nonnull(1, 2)
 size_t
 input_stream_read(struct input_stream *is, void *ptr, size_t size,
 		  GError **error_r);
-
-/**
- * Wrapper for input_stream_tag() which locks and unlocks the
- * mutex; the caller must not be holding it already.
- */
-gcc_nonnull(1, 2)
-size_t
-input_stream_lock_read(struct input_stream *is, void *ptr, size_t size,
-		       GError **error_r);
 
 #endif

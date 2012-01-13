@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,15 +30,13 @@
 #include <stdio.h>
 
 struct playlist;
-struct player_control;
 
 void
-playlist_state_save(FILE *fp, const struct playlist *playlist,
-		    struct player_control *pc);
+playlist_state_save(FILE *fp, const struct playlist *playlist);
 
 bool
 playlist_state_restore(const char *line, FILE *fp, GString *buffer,
-		       struct playlist *playlist, struct player_control *pc);
+		       struct playlist *playlist);
 
 /**
  * Generates a hash number for the current state of the playlist and
@@ -47,7 +45,6 @@ playlist_state_restore(const char *line, FILE *fp, GString *buffer,
  * be saved.
  */
 unsigned
-playlist_state_get_hash(const struct playlist *playlist,
-			struct player_control *pc);
+playlist_state_get_hash(const struct playlist *playlist);
 
 #endif

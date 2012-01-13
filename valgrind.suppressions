@@ -4,14 +4,6 @@
 # bogus messages.
 
 {
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_random_int
-}
-
-{
    g_main_context_dispatch
    Memcheck:Leak
    fun:malloc
@@ -98,34 +90,21 @@
 }
 
 {
-   g_static_private_set
+   g_get_language_names
    Memcheck:Leak
-   fun:memalign
-   ...
-   fun:g_static_private_set
-}
-
-{
-   g_static_private_set
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_static_private_set
-}
-
-{
-   g_static_private_set
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_intern_static_string
+   fun:malloc
+   fun:g_malloc
+   fun:g_strdup
+   fun:g_get_language_names
 }
 
 {
    g_get_language_names
    Memcheck:Leak
-   fun:*alloc
-   ...
+   fun:malloc
+   fun:g_malloc
+   fun:g_strconcat
+   fun:_g_compute_locale_variants
    fun:g_get_language_names
 }
 
@@ -133,31 +112,136 @@
    g_get_language_names
    Memcheck:Leak
    fun:memalign
-   ...
+   fun:posix_memalign
+   fun:slab_allocator_alloc_chunk
+   fun:g_slice_alloc
+   fun:g_hash_table_new_full
+   fun:g_get_language_names
+}
+
+{
+   g_get_language_names
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_get_language_names
+}
+
+{
+   g_get_language_names
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_get_language_names
+}
+
+{
+   g_static_private_set
+   Memcheck:Leak
+   fun:realloc
+   fun:g_realloc
+   fun:g_array_maybe_expand
+   fun:g_array_set_size
+   fun:g_static_private_set
+}
+
+{
+   g_static_private_set
+   Memcheck:Leak
+   fun:malloc
+   fun:realloc
+   fun:g_realloc
+   fun:g_array_maybe_expand
+   fun:g_array_set_size
+   fun:g_static_private_set
+}
+
+{
+   g_get_language_names
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_hash_table_insert_internal
+   fun:g_get_language_names
+}
+
+{
+   g_get_language_names
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_slice_alloc
+   fun:g_hash_table_insert_internal
+   fun:g_get_language_names
+}
+
+{
+   g_get_language_names
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_hash_table_resize
+   fun:g_hash_table_insert_internal
+   fun:g_get_language_names
+}
+
+{
+   g_get_language_names
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_slice_alloc
+   fun:g_hash_table_new_full
+   fun:g_get_language_names
+}
+
+{
+   g_get_language_names
+   Memcheck:Leak
+   fun:memalign
+   fun:posix_memalign
+   fun:slab_allocator_alloc_chunk
+   fun:g_slice_alloc
+   fun:g_slist_prepend
+   fun:g_strsplit
    fun:g_get_language_names
 }
 
 {
    g_set_prgname
    Memcheck:Leak
-   fun:*alloc
-   ...
+   fun:malloc
+   fun:g_malloc
+   fun:g_strdup
    fun:g_set_prgname
 }
 
 {
    g_set_application_name
    Memcheck:Leak
-   fun:*alloc
-   ...
+   fun:malloc
+   fun:g_malloc
+   fun:g_strdup
    fun:g_set_application_name
 }
 
 {
    g_thread_init_glib
    Memcheck:Leak
-   fun:*alloc
-   ...
+   fun:malloc
+   fun:g_malloc
+   fun:g_private_new_posix_impl
+   fun:_g_messages_thread_init_nomessage
+   fun:g_thread_init_glib
+}
+
+{
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_private_new_posix_impl
+   fun:_g_slice_thread_init_nomessage
    fun:g_thread_init_glib
 }
 
@@ -170,43 +254,168 @@
 }
 
 {
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_private_new_posix_impl
+   fun:g_thread_init_glib
+}
+
+{
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_mutex_new_posix_impl
+   fun:_g_messages_thread_init_nomessage
+   fun:g_thread_init_glib
+}
+
+{
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_thread_self
+   fun:g_thread_init_glib
+}
+
+{
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_mutex_new_posix_impl
+   fun:_g_slice_thread_init_nomessage
+   fun:g_thread_init_glib
+}
+
+{
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_cond_new_posix_impl
+   fun:g_thread_init_glib
+}
+
+{
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_mutex_new_posix_impl
+   fun:g_thread_init_glib
+}
+
+{
+   g_thread_init_glib
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_mutex_new_posix_impl
+   fun:_g_mem_thread_init_noprivate_nomessage
+   fun:g_thread_init_glib
+}
+
+{
    g_get_filename_charsets
    Memcheck:Leak
-   fun:*alloc
-   ...
+   fun:malloc
+   fun:g_malloc
+   fun:g_strdup
    fun:g_get_filename_charsets
+}
+
+{
+   g_get_filename_charsets
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_get_filename_charsets
+}
+
+{
+   g_get_filename_charsets
+   Memcheck:Leak
+   fun:memalign
+   fun:posix_memalign
+   fun:slab_allocator_alloc_chunk
+   fun:g_slice_alloc
+   fun:g_array_sized_new
+   fun:g_static_private_set
+   fun:g_get_filename_charsets
+}
+
+{
+   g_get_filename_charsets
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_slice_alloc
+   fun:g_array_sized_new
+   fun:g_static_private_set
+   fun:g_get_filename_charsets
+}
+
+{
+   g_static_private_set
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_slice_alloc
+   fun:g_array_sized_new
+   fun:g_static_private_set
+}
+
+{
+   g_static_private_get
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_thread_self
+   fun:g_static_private_get
 }
 
 {
    g_get_charset
    Memcheck:Leak
-   fun:*alloc
-   ...
+   fun:malloc
+   fun:g_malloc
+   fun:g_strdup
    fun:g_get_charset
 }
 
 {
-   openssl
+   g_get_charset
    Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:ENGINE_load_dynamic
+   fun:calloc
+   fun:g_malloc0
+   fun:g_get_charset
 }
 
 {
-   <insert_a_suppression_name_here>
+   g_get_charset
    Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_data_initialize
+   fun:calloc
+   fun:g_malloc0
+   fun:g_slice_alloc
+   fun:g_array_sized_new
+   fun:g_static_private_set
+   fun:g_get_charset
 }
 
 {
-   <insert_a_suppression_name_here>
+   g_get_charset
    Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_resolver_get_default
+   fun:memalign
+   fun:posix_memalign
+   fun:slab_allocator_alloc_chunk
+   fun:g_slice_alloc
+   fun:g_array_sized_new
+   fun:g_static_private_set
+   fun:g_get_charset
 }
 
 {
@@ -214,33 +423,194 @@
    Memcheck:Leak
    fun:malloc
    fun:CRYPTO_malloc
-   ...
+   fun:engine_cleanup_add_last
+   fun:ENGINE_add
+   fun:ENGINE_load_dynamic
+}
+
+{
+   openssl
+   Memcheck:Leak
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:ENGINE_new
+   fun:ENGINE_load_dynamic
+}
+
+{
+   openssl
+   Memcheck:Leak
+   fun:malloc
+   fun:CRYPTO_malloc
+   obj:/usr/lib/libssl.so.0.9.8
    fun:SSL_COMP_get_compression_methods
    fun:SSL_library_init
 }
 
 {
-   <insert_a_suppression_name_here>
+   openssl
    Memcheck:Leak
-   fun:*alloc
+   fun:malloc
    fun:CRYPTO_malloc
-   ...
-   fun:ERR_get_state
+   fun:sk_new
+   obj:/usr/lib/libssl.so.0.9.8
+   fun:SSL_COMP_get_compression_methods
+   fun:SSL_library_init
+}
+
+{
+   openssl
+   Memcheck:Leak
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:sk_new
+   fun:engine_cleanup_add_last
+   fun:ENGINE_add
+   fun:ENGINE_load_dynamic
 }
 
 {
    <insert_a_suppression_name_here>
    Memcheck:Leak
-   fun:*alloc
+   fun:malloc
    fun:CRYPTO_malloc
-   ...
-   fun:RSA_new_method
+   fun:ERR_get_state
+   fun:ERR_clear_error
+   fun:Curl_ossl_init
+   fun:curl_global_init
+}
+
+{
+   openssl
+   Memcheck:Leak
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:lh_new
+   obj:/usr/lib/libcrypto.so.0.9.8
+   obj:/usr/lib/libcrypto.so.0.9.8
+   fun:ERR_get_state
+   fun:ERR_clear_error
+   fun:Curl_ossl_init
+   fun:curl_global_init
+}
+
+{
+   openssl
+   Memcheck:Leak
+   fun:malloc
+   fun:CRYPTO_malloc
+   fun:lh_insert
+   obj:/usr/lib/libcrypto.so.0.9.8
+   fun:ERR_get_state
+   fun:ERR_clear_error
 }
 
 {
    <insert a suppression name here>
    Memcheck:Leak
-   fun:*alloc
+   fun:malloc
+   fun:_dl_map_object_deps
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+   fun:do_dlopen
+   fun:_dl_catch_error
+   fun:dlerror_run
+   fun:__libc_dlopen_mode
+   fun:pthread_cancel_init
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:calloc
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:malloc
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:malloc
+   fun:local_strdup
+   fun:_dl_map_object
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:calloc
+   fun:_dl_check_map_versions
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:malloc
+   fun:_dl_map_object_deps
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:malloc
+   fun:_dl_map_object_deps
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:malloc
+   fun:_dl_new_object
+   fun:_dl_map_object_from_fd
+   fun:_dl_map_object
+   fun:openaux
+   fun:_dl_catch_error
+   fun:_dl_map_object_deps
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+}
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:malloc
+   fun:local_strdup
+   fun:_dl_map_object
+   fun:openaux
+   fun:_dl_catch_error
+   fun:_dl_map_object_deps
+   fun:dl_open_worker
+   fun:_dl_catch_error
    fun:_dl_open
 }
 
@@ -249,6 +619,20 @@
    Memcheck:Leak
    fun:calloc
    fun:_dlerror_run
+}
+
+{
+   dlopen
+   Memcheck:Leak
+   fun:malloc
+   fun:_dl_scope_free
+   fun:_dl_map_object_deps
+   fun:dl_open_worker
+   fun:_dl_catch_error
+   fun:_dl_open
+   fun:do_dlopen
+   fun:_dl_catch_error
+   fun:dlerror_run
 }
 
 # is that a leak in libdbus?
@@ -329,11 +713,58 @@
 }
 
 {
+   g_quark_from_static_string
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_hash_table_new_full
+   fun:g_quark_from_static_string
+}
+
+{
+   g_quark_from_static_string
+   Memcheck:Leak
+   fun:malloc
+   fun:realloc
+   fun:g_realloc
+   fun:g_quark_from_static_string
+}
+
+{
    g_quark_from_string
    Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_quark_from_*
+   fun:malloc
+   fun:g_malloc
+   fun:g_strdup
+   fun:g_quark_from_string
+}
+
+{
+   g_quark_from_string
+   Memcheck:Leak
+   fun:calloc
+   fun:g_malloc0
+   fun:g_hash_table_new_full
+   fun:g_quark_from_string
+}
+
+{
+   g_quark_from_string
+   Memcheck:Leak
+   fun:malloc
+   fun:realloc
+   fun:g_realloc
+   fun:g_quark_from_string
+}
+
+{
+   g_quark_from_string
+   Memcheck:Leak
+   fun:malloc
+   fun:g_malloc
+   fun:g_slice_alloc
+   fun:g_hash_table_new_full
+   fun:g_quark_from_string
 }
 
 {
@@ -367,134 +798,6 @@
    fun:malloc
    fun:tsearch
    fun:__nss_lookup_function
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_type_init_with_debug_flags
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_type_register_static
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_type_add_interface_static
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_type_add_interface_check
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_type_interface_add_prerequisite
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:calloc
-   fun:g_malloc0
-   fun:g_type_class_ref
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_*_class_intern_init
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:type_iface_vtable_base_init_Wm
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_object_do_class_init
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_object_base_class_init
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:g_object_class_install_property
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:soup_*_class_intern_init
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:soup_auth_manager_add_type
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:soup_auth_manager_class_intern_init
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:soup_auth_manager_ntlm_class_intern_init
-}
-
-{
-   <insert_a_suppression_name_here>
-   Memcheck:Leak
-   fun:*alloc
-   ...
-   fun:intern_header_name
 }
 
 {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,6 @@
 #include "config.h"
 #include "conf.h"
 #include "utils.h"
-#include "string_util.h"
 #include "tokenizer.h"
 #include "path.h"
 #include "glib_compat.h"
@@ -59,7 +58,6 @@ static struct config_entry config_entries[] = {
 	{ .name = CONF_LOG_FILE, false, false },
 	{ .name = CONF_PID_FILE, false, false },
 	{ .name = CONF_STATE_FILE, false, false },
-	{ .name = "restore_paused", false, false },
 	{ .name = CONF_USER, false, false },
 	{ .name = CONF_GROUP, false, false },
 	{ .name = CONF_BIND_TO_ADDRESS, true, false },
@@ -99,9 +97,6 @@ static struct config_entry config_entries[] = {
 	{ .name = CONF_PLAYLIST_PLUGIN, true, true },
 	{ .name = CONF_AUTO_UPDATE, false, false },
 	{ .name = CONF_AUTO_UPDATE_DEPTH, false, false },
-	{ .name = CONF_DESPOTIFY_USER, false, false },
-	{ .name = CONF_DESPOTIFY_PASSWORD, false, false},
-	{ .name = CONF_DESPOTIFY_HIGH_BITRATE, false, false },
 	{ .name = "filter", true, true },
 };
 
@@ -143,7 +138,7 @@ config_new_param(const char *value, int line)
 	return ret;
 }
 
-void
+static void
 config_param_free(struct config_param *param)
 {
 	g_free(param->value);
@@ -223,13 +218,20 @@ void config_global_check(void)
 	}
 }
 
-void
+bool
 config_add_block_param(struct config_param * param, const char *name,
-		       const char *value, int line)
+		       const char *value, int line, GError **error_r)
 {
 	struct block_param *bp;
 
-	assert(config_get_block_param(param, name) == NULL);
+	bp = config_get_block_param(param, name);
+	if (bp != NULL) {
+		g_set_error(error_r, config_quark(), 0,
+			    "\"%s\" first defined on line %i, and "
+			    "redefined on line %i\n", name,
+			    bp->line, line);
+		return false;
+	}
 
 	param->num_block_params++;
 
@@ -243,46 +245,7 @@ config_add_block_param(struct config_param * param, const char *name,
 	bp->value = g_strdup(value);
 	bp->line = line;
 	bp->used = false;
-}
 
-static bool
-config_read_name_value(struct config_param *param, char *input, unsigned line,
-		       GError **error_r)
-{
-	const char *name = tokenizer_next_word(&input, error_r);
-	if (name == NULL) {
-		assert(*input != 0);
-		return false;
-	}
-
-	const char *value = tokenizer_next_string(&input, error_r);
-	if (value == NULL) {
-		if (*input == 0) {
-			assert(error_r == NULL || *error_r == NULL);
-			g_set_error(error_r, config_quark(), 0,
-				    "Value missing");
-		} else {
-			assert(error_r == NULL || *error_r != NULL);
-		}
-
-		return false;
-	}
-
-	if (*input != 0 && *input != CONF_COMMENT) {
-		g_set_error(error_r, config_quark(), 0,
-			    "Unknown tokens after value");
-		return false;
-	}
-
-	const struct block_param *bp = config_get_block_param(param, name);
-	if (bp != NULL) {
-		g_set_error(error_r, config_quark(), 0,
-			    "\"%s\" is duplicate, first defined on line %i",
-			    name, bp->line);
-		return false;
-	}
-
-	config_add_block_param(param, name, value, line);
 	return true;
 }
 
@@ -291,9 +254,11 @@ config_read_block(FILE *fp, int *count, char *string, GError **error_r)
 {
 	struct config_param *ret = config_new_param(NULL, *count);
 	GError *error = NULL;
+	bool success;
 
 	while (true) {
 		char *line;
+		const char *name, *value;
 
 		line = fgets(string, MAX_STRING_SIZE, fp);
 		if (line == NULL) {
@@ -304,7 +269,7 @@ config_read_block(FILE *fp, int *count, char *string, GError **error_r)
 		}
 
 		(*count)++;
-		line = strchug_fast(line);
+		line = g_strchug(line);
 		if (*line == 0 || *line == CONF_COMMENT)
 			continue;
 
@@ -312,7 +277,7 @@ config_read_block(FILE *fp, int *count, char *string, GError **error_r)
 			/* end of this block; return from the function
 			   (and from this "while" loop) */
 
-			line = strchug_fast(line + 1);
+			line = g_strchug(line + 1);
 			if (*line != 0 && *line != CONF_COMMENT) {
 				config_param_free(ret);
 				g_set_error(error_r, config_quark(), 0,
@@ -326,12 +291,41 @@ config_read_block(FILE *fp, int *count, char *string, GError **error_r)
 
 		/* parse name and value */
 
-		if (!config_read_name_value(ret, line, *count, &error)) {
+		name = tokenizer_next_word(&line, &error);
+		if (name == NULL) {
 			assert(*line != 0);
 			config_param_free(ret);
 			g_propagate_prefixed_error(error_r, error,
 						   "line %i: ", *count);
 			return NULL;
+		}
+
+		value = tokenizer_next_string(&line, &error);
+		if (value == NULL) {
+			config_param_free(ret);
+			if (*line == 0)
+				g_set_error(error_r, config_quark(), 0,
+					    "line %i: Value missing", *count);
+			else
+				g_propagate_prefixed_error(error_r, error,
+							   "line %i: ",
+							   *count);
+			return NULL;
+		}
+
+		if (*line != 0 && *line != CONF_COMMENT) {
+			config_param_free(ret);
+			g_set_error(error_r, config_quark(), 0,
+				    "line %i: Unknown tokens after value",
+				    *count);
+			return NULL;
+		}
+
+		success = config_add_block_param(ret, name, value, *count,
+						 error_r);
+		if (!success) {
+			config_param_free(ret);
+			return false;
 		}
 	}
 }
@@ -361,7 +355,7 @@ config_read_file(const char *file, GError **error_r)
 
 		count++;
 
-		line = strchug_fast(string);
+		line = g_strchug(string);
 		if (*line == 0 || *line == CONF_COMMENT)
 			continue;
 
@@ -411,7 +405,7 @@ config_read_file(const char *file, GError **error_r)
 				return false;
 			}
 
-			line = strchug_fast(line + 1);
+			line = g_strchug(line + 1);
 			if (*line != 0 && *line != CONF_COMMENT) {
 				g_set_error(error_r, config_quark(), 0,
 					    "line %i: Unknown tokens after '{'",
@@ -463,7 +457,7 @@ config_read_file(const char *file, GError **error_r)
 	return true;
 }
 
-const struct config_param *
+struct config_param *
 config_get_next_param(const char *name, const struct config_param * last)
 {
 	struct config_entry *entry;
@@ -503,23 +497,22 @@ config_get_string(const char *name, const char *default_value)
 	return param->value;
 }
 
-char *
-config_dup_path(const char *name, GError **error_r)
+const char *
+config_get_path(const char *name)
 {
-	assert(error_r != NULL);
-	assert(*error_r == NULL);
+	struct config_param *param = config_get_param(name);
+	char *path;
 
-	const struct config_param *param = config_get_param(name);
 	if (param == NULL)
 		return NULL;
 
-	char *path = parsePath(param->value, error_r);
-	if (G_UNLIKELY(path == NULL))
-		g_prefix_error(error_r,
-			       "Invalid path in \"%s\" at line %i: ",
-			       name, param->line);
+	path = parsePath(param->value);
+	if (path == NULL)
+		MPD_ERROR("error parsing \"%s\" at line %i\n",
+			  name, param->line);
 
-	return path;
+	g_free(param->value);
+	return param->value = path;
 }
 
 unsigned
@@ -560,7 +553,7 @@ config_get_positive(const char *name, unsigned default_value)
 	return (unsigned)value;
 }
 
-const struct block_param *
+struct block_param *
 config_get_block_param(const struct config_param * param, const char *name)
 {
 	if (param == NULL)
@@ -598,7 +591,7 @@ const char *
 config_get_block_string(const struct config_param *param, const char *name,
 			const char *default_value)
 {
-	const struct block_param *bp = config_get_block_param(param, name);
+	struct block_param *bp = config_get_block_param(param, name);
 
 	if (bp == NULL)
 		return default_value;
@@ -606,31 +599,11 @@ config_get_block_string(const struct config_param *param, const char *name,
 	return bp->value;
 }
 
-char *
-config_dup_block_path(const struct config_param *param, const char *name,
-		      GError **error_r)
-{
-	assert(error_r != NULL);
-	assert(*error_r == NULL);
-
-	const struct block_param *bp = config_get_block_param(param, name);
-	if (bp == NULL)
-		return NULL;
-
-	char *path = parsePath(bp->value, error_r);
-	if (G_UNLIKELY(path == NULL))
-		g_prefix_error(error_r,
-			       "Invalid path in \"%s\" at line %i: ",
-			       name, bp->line);
-
-	return path;
-}
-
 unsigned
 config_get_block_unsigned(const struct config_param *param, const char *name,
 			  unsigned default_value)
 {
-	const struct block_param *bp = config_get_block_param(param, name);
+	struct block_param *bp = config_get_block_param(param, name);
 	long value;
 	char *endptr;
 
@@ -651,7 +624,7 @@ bool
 config_get_block_bool(const struct config_param *param, const char *name,
 		      bool default_value)
 {
-	const struct block_param *bp = config_get_block_param(param, name);
+	struct block_param *bp = config_get_block_param(param, name);
 	bool success, value;
 
 	if (bp == NULL)

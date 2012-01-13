@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,6 @@
 #include "playlist.h"
 #include "playlist_state.h"
 #include "event_pipe.h"
-#include "main.h"
 
 struct playlist g_playlist;
 
@@ -39,7 +38,7 @@ playlist_tag_event(void)
 static void
 playlist_event(void)
 {
-	playlist_sync(&g_playlist, global_player_control);
+	playlist_sync(&g_playlist);
 }
 
 void

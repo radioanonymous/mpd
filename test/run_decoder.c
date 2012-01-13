@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
  */
 
 #include "config.h"
-#include "io_thread.h"
 #include "decoder_list.h"
 #include "decoder_api.h"
 #include "input_init.h"
@@ -32,7 +31,6 @@
 
 #include <assert.h>
 #include <unistd.h>
-#include <stdlib.h>
 
 static void
 my_log_func(const gchar *log_domain, G_GNUC_UNUSED GLogLevelFlags log_level,
@@ -56,8 +54,8 @@ idle_add(G_GNUC_UNUSED unsigned flags)
  * No-op dummy.
  */
 bool
-pcm_volume(G_GNUC_UNUSED void *buffer, G_GNUC_UNUSED size_t length,
-	   G_GNUC_UNUSED enum sample_format format,
+pcm_volume(G_GNUC_UNUSED void *buffer, G_GNUC_UNUSED int length,
+	   G_GNUC_UNUSED const struct audio_format *format,
 	   G_GNUC_UNUSED int volume)
 {
 	return true;
@@ -112,7 +110,7 @@ decoder_read(G_GNUC_UNUSED struct decoder *decoder,
 	     struct input_stream *is,
 	     void *buffer, size_t length)
 {
-	return input_stream_lock_read(is, buffer, length, NULL);
+	return input_stream_read(is, buffer, length, NULL);
 }
 
 void
@@ -180,15 +178,7 @@ int main(int argc, char **argv)
 	decoder_name = argv[1];
 	decoder.uri = argv[2];
 
-	g_thread_init(NULL);
 	g_log_set_default_handler(my_log_func, NULL);
-
-	io_thread_init();
-	if (!io_thread_start(&error)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-		return EXIT_FAILURE;
-	}
 
 	if (!input_stream_global_init(&error)) {
 		g_warning("%s", error->message);
@@ -210,11 +200,8 @@ int main(int argc, char **argv)
 		decoder_plugin_file_decode(decoder.plugin, &decoder,
 					   decoder.uri);
 	} else if (decoder.plugin->stream_decode != NULL) {
-		GMutex *mutex = g_mutex_new();
-		GCond *cond = g_cond_new();
-
 		struct input_stream *is =
-			input_stream_open(decoder.uri, mutex, cond, &error);
+			input_stream_open(decoder.uri, &error);
 		if (is == NULL) {
 			if (error != NULL) {
 				g_warning("%s", error->message);
@@ -228,9 +215,6 @@ int main(int argc, char **argv)
 		decoder_plugin_stream_decode(decoder.plugin, &decoder, is);
 
 		input_stream_close(is);
-
-		g_cond_free(cond);
-		g_mutex_free(mutex);
 	} else {
 		g_printerr("Decoder plugin is not usable\n");
 		return 1;
@@ -238,7 +222,6 @@ int main(int argc, char **argv)
 
 	decoder_plugin_deinit_all();
 	input_stream_global_finish();
-	io_thread_deinit();
 
 	if (!decoder.initialized) {
 		g_printerr("Decoding failed\n");

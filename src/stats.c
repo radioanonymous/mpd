@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,13 +20,11 @@
 #include "config.h"
 #include "stats.h"
 #include "database.h"
-#include "db_visitor.h"
 #include "tag.h"
 #include "song.h"
 #include "client.h"
 #include "player_control.h"
 #include "strset.h"
-#include "client_internal.h"
 
 struct stats stats;
 
@@ -69,9 +67,8 @@ visit_tag(struct visit_data *data, const struct tag *tag)
 	}
 }
 
-static bool
-collect_stats_song(struct song *song, void *_data,
-		   G_GNUC_UNUSED GError **error_r)
+static int
+stats_collect_song(struct song *song, void *_data)
 {
 	struct visit_data *data = _data;
 
@@ -80,12 +77,8 @@ collect_stats_song(struct song *song, void *_data,
 	if (song->tag != NULL)
 		visit_tag(data, song->tag);
 
-	return true;
+	return 0;
 }
-
-static const struct db_visitor collect_stats_visitor = {
-	.song = collect_stats_song,
-};
 
 void stats_update(void)
 {
@@ -98,7 +91,7 @@ void stats_update(void)
 	data.artists = strset_new();
 	data.albums = strset_new();
 
-	db_walk("", &collect_stats_visitor, &data, NULL);
+	db_walk(NULL, stats_collect_song, NULL, &data);
 
 	stats.artist_count = strset_size(data.artists);
 	stats.album_count = strset_size(data.albums);
@@ -121,8 +114,8 @@ int stats_print(struct client *client)
 		      stats.album_count,
 		      stats.song_count,
 		      (long)g_timer_elapsed(stats.timer, NULL),
-		      (long)(pc_get_total_play_time(client->player_control) + 0.5),
+		      (long)(pc_get_total_play_time() + 0.5),
 		      stats.song_duration,
-		      (long)db_get_mtime());
+		      db_get_mtime());
 	return 0;
 }

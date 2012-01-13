@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,6 @@
 #include "uri.h"
 #include "song.h"
 #include "tag.h"
-#include "string_util.h"
 
 #include <glib.h>
 
@@ -90,7 +89,7 @@ extm3u_parse_tag(const char *line)
 		/* 0 means unknown duration */
 		duration = 0;
 
-	name = strchug_fast_c(endptr + 1);
+	name = g_strchug(endptr + 1);
 	if (*name == 0 && duration == 0)
 		/* no information available; don't allocate a tag
 		   object */

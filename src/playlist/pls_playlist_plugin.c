@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -115,8 +115,7 @@ pls_open_stream(struct input_stream *is)
 	GString *kf_data = g_string_new("");
 
 	do {
-		nbytes = input_stream_lock_read(is, buffer, sizeof(buffer),
-						&error);
+		nbytes = input_stream_read(is, buffer, sizeof(buffer), &error);
 		if (nbytes == 0) {
 			if (error != NULL) {
 				g_string_free(kf_data, TRUE);

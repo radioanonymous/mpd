@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,7 +18,6 @@
  */
 
 #include "config.h"
-#include "io_thread.h"
 #include "output_plugin.h"
 #include "output_internal.h"
 #include "output_control.h"
@@ -29,7 +28,6 @@
 #include "event_pipe.h"
 #include "idle.h"
 #include "playlist.h"
-#include "player_control.h"
 #include "stdbin.h"
 
 #include <glib.h>
@@ -37,7 +35,6 @@
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
 
 struct playlist g_playlist;
 
@@ -94,10 +91,11 @@ find_named_config_block(const char *block, const char *name)
 	return NULL;
 }
 
-static struct audio_output *
-load_audio_output(const char *name)
+static bool
+load_audio_output(struct audio_output *ao, const char *name)
 {
 	const struct config_param *param;
+	bool success;
 	GError *error = NULL;
 
 	param = find_named_config_block(CONF_AUDIO_OUTPUT, name);
@@ -106,91 +104,25 @@ load_audio_output(const char *name)
 		return false;
 	}
 
-	static struct player_control dummy_player_control;
-
-	struct audio_output *ao =
-		audio_output_new(param, &dummy_player_control, &error);
-	if (ao == NULL) {
+	success = audio_output_init(ao, param, &error);
+	if (!success) {
 		g_printerr("%s\n", error->message);
 		g_error_free(error);
 	}
 
-	return ao;
-}
-
-static bool
-run_output(struct audio_output *ao, struct audio_format *audio_format)
-{
-	/* open the audio output */
-
-	GError *error = NULL;
-	if (!ao_plugin_enable(ao, &error)) {
-		g_printerr("Failed to enable audio output: %s\n",
-			   error->message);
-		g_error_free(error);
-		return false;
-	}
-
-	if (!ao_plugin_open(ao, audio_format, &error)) {
-		ao_plugin_disable(ao);
-		g_printerr("Failed to open audio output: %s\n",
-			   error->message);
-		g_error_free(error);
-		return false;
-	}
-
-	struct audio_format_string af_string;
-	g_printerr("audio_format=%s\n",
-		   audio_format_to_string(audio_format, &af_string));
-
-	size_t frame_size = audio_format_frame_size(audio_format);
-
-	/* play */
-
-	size_t length = 0;
-	char buffer[4096];
-	while (true) {
-		if (length < sizeof(buffer)) {
-			ssize_t nbytes = read(0, buffer + length,
-					      sizeof(buffer) - length);
-			if (nbytes <= 0)
-				break;
-
-			length += (size_t)nbytes;
-		}
-
-		size_t play_length = (length / frame_size) * frame_size;
-		if (play_length > 0) {
-			size_t consumed = ao_plugin_play(ao,
-							 buffer, play_length,
-							 &error);
-			if (consumed == 0) {
-				ao_plugin_close(ao);
-				ao_plugin_disable(ao);
-				g_printerr("Failed to play: %s\n",
-					   error->message);
-				g_error_free(error);
-				return false;
-			}
-
-			assert(consumed <= length);
-			assert(consumed % frame_size == 0);
-
-			length -= consumed;
-			memmove(buffer, buffer + consumed, length);
-		}
-	}
-
-	ao_plugin_close(ao);
-	ao_plugin_disable(ao);
-	return true;
+	return success;
 }
 
 int main(int argc, char **argv)
 {
+	struct audio_output ao;
 	struct audio_format audio_format;
+	struct audio_format_string af_string;
 	bool success;
 	GError *error = NULL;
+	char buffer[4096];
+	ssize_t nbytes;
+	size_t frame_size, length = 0, play_length, consumed;
 
 	if (argc < 3 || argc > 4) {
 		g_printerr("Usage: run_output CONFIG NAME [FORMAT] <IN\n");
@@ -211,17 +143,9 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	io_thread_init();
-	if (!io_thread_start(&error)) {
-		g_warning("%s", error->message);
-		g_error_free(error);
-		return EXIT_FAILURE;
-	}
-
 	/* initialize the audio output */
 
-	struct audio_output *ao = load_audio_output(argv[2]);
-	if (ao == NULL)
+	if (!load_audio_output(&ao, argv[2]))
 		return 1;
 
 	/* parse the audio format */
@@ -237,17 +161,59 @@ int main(int argc, char **argv)
 		}
 	}
 
-	/* do it */
+	/* open the audio output */
 
-	success = run_output(ao, &audio_format);
+	success = ao_plugin_open(ao.plugin, ao.data, &audio_format, &error);
+	if (!success) {
+		g_printerr("Failed to open audio output: %s\n",
+			   error->message);
+		g_error_free(error);
+		return 1;
+	}
+
+	g_printerr("audio_format=%s\n",
+		   audio_format_to_string(&audio_format, &af_string));
+
+	frame_size = audio_format_frame_size(&audio_format);
+
+	/* play */
+
+	while (true) {
+		if (length < sizeof(buffer)) {
+			nbytes = read(0, buffer + length, sizeof(buffer) - length);
+			if (nbytes <= 0)
+				break;
+
+			length += (size_t)nbytes;
+		}
+
+		play_length = (length / frame_size) * frame_size;
+		if (play_length > 0) {
+			consumed = ao_plugin_play(ao.plugin, ao.data,
+						  buffer, play_length,
+						  &error);
+			if (consumed == 0) {
+				g_printerr("Failed to play: %s\n",
+					   error->message);
+				g_error_free(error);
+				return 1;
+			}
+
+			assert(consumed <= length);
+			assert(consumed % frame_size == 0);
+
+			length -= consumed;
+			memmove(buffer, buffer + consumed, length);
+		}
+	}
 
 	/* cleanup and exit */
 
-	audio_output_free(ao);
-
-	io_thread_deinit();
+	ao_plugin_close(ao.plugin, ao.data);
+	ao_plugin_finish(ao.plugin, ao.data);
+	g_mutex_free(ao.mutex);
 
 	config_global_finish();
 
-	return success ? EXIT_SUCCESS : EXIT_FAILURE;
+	return 0;
 }

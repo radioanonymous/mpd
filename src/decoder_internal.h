@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2003-2011 The Music Player Daemon Project
+ * Copyright (C) 2003-2010 The Music Player Daemon Project
  * http://www.musicpd.org
  *
  * This program is free software; you can redistribute it and/or modify
@@ -89,7 +89,7 @@ struct decoder {
  * @return the chunk, or NULL if we have received a decoder command
  */
 struct music_chunk *
-decoder_get_chunk(struct decoder *decoder);
+decoder_get_chunk(struct decoder *decoder, struct input_stream *is);
 
 /**
  * Flushes the current chunk.
