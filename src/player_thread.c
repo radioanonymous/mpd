@@ -620,11 +620,6 @@ static void player_process_command(struct player *player)
 static void
 update_song_tag(struct song *song, const struct tag *new_tag)
 {
-	if (song_is_file(song))
-		/* don't update tags of local files, only remote
-		   streams may change tags dynamically */
-		return;
-
 	struct tag *old_tag = song->tag;
 	song->tag = tag_dup(new_tag);
 
