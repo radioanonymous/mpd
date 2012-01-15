@@ -529,7 +529,11 @@ static void shout_passthru_radio(struct shout_data *sd)
 			if (value && *value) {
 				shout_metadata_add(sd->shout_meta, t[i].icy_name, value);
 			} else {
-				shout_metadata_add(sd->shout_meta, t[i].icy_name, "");
+				if (i == TAG_STREAM_DESCRIPTION && sd->stags[i])
+					value = sd->stags[i];
+				else
+					value = "";
+				shout_metadata_add(sd->shout_meta, t[i].icy_name, value);
 			}
 		}
 	} else {
