@@ -519,3 +519,40 @@ void tag_add_item_n(struct tag *tag, enum tag_type type,
 
 	tag_add_item_internal(tag, type, value, len);
 }
+
+static struct stream_tag *stream_tags = NULL;
+static struct stream_tag stags[TAG_STREAM_NUM_OF_ITEM_TYPES] = {
+	{"xstreamname",		NULL},
+	{"xstreamdesc",		NULL},
+	{"xstreamurl",		NULL},
+	{"xstreamgenre",	NULL}
+};
+
+void stream_tag_reset()
+{
+	unsigned i;
+	for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++) {
+		g_free(stags[i].value);
+		stags[i].value = NULL;
+	}
+	stream_tags = NULL;
+}
+
+void stream_tag_submit(enum stream_tag_type t, char *value)
+{
+	if (stags[t].value)
+		g_free(stags[t].value);
+	stags[t].value = value;
+	stream_tags = stags;
+}
+
+struct stream_tag* stream_tag_get_current()
+{
+	return stream_tags;
+}
+
+const struct stream_tag *stream_tag_get_names()
+{
+	return stags;
+}
+

@@ -51,6 +51,8 @@ struct shout_data {
 
 	int timeout;
 
+	char *stags[TAG_STREAM_NUM_OF_ITEM_TYPES];
+
 	struct shout_buffer buf;
 };
 
@@ -85,12 +87,17 @@ static struct shout_data *new_shout_data(void)
 	ret->bitrate = -1;
 	ret->quality = -2.0;
 	ret->timeout = DEFAULT_CONN_TIMEOUT;
+	memset(ret->stags, 0, sizeof(ret->stags));
 
 	return ret;
 }
 
 static void free_shout_data(struct shout_data *sd)
 {
+	unsigned i;
+	for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++)
+		g_free(sd->stags[i]);
+
 	if (sd->shout_meta)
 		shout_metadata_free(sd->shout_meta);
 	if (sd->shout_conn)
@@ -160,6 +167,7 @@ my_shout_init_driver(const struct audio_format *audio_format,
 
 	check_block_param("name");
 	name = block_param->value;
+	sd->stags[TAG_STREAM_NAME] = g_strdup(name);
 
 	public = config_get_block_bool(param, "public", false);
 
@@ -269,6 +277,8 @@ my_shout_init_driver(const struct audio_format *audio_format,
 			    "%s", shout_get_error(sd->shout_conn));
 		goto failure;
 	}
+	if (value)
+		sd->stags[TAG_STREAM_GENRE] = g_strdup(value);
 
 	value = config_get_block_string(param, "description", NULL);
 	if (value != NULL && shout_set_description(sd->shout_conn, value)) {
@@ -276,6 +286,12 @@ my_shout_init_driver(const struct audio_format *audio_format,
 			    "%s", shout_get_error(sd->shout_conn));
 		goto failure;
 	}
+	if (value)
+		sd->stags[TAG_STREAM_DESCRIPTION] = g_strdup(value);
+	/* url */
+	value = config_get_block_string(param, "url", NULL);
+	if (value)
+		sd->stags[TAG_STREAM_URL] = g_strdup(value);
 
 	{
 		char temp[11];
@@ -499,9 +515,33 @@ shout_tag_to_metadata(const struct tag *tag, char *dest, size_t size)
 		}
 	}
 
-	snprintf(dest, size, "%s - %s", artist, title);
 	infix = *artist && *title ? " - " : "";
 	snprintf(dest, size, "%s%s%s", artist, infix, title);
+}
+
+static void shout_passthru_radio(struct shout_data *sd)
+{
+	unsigned i;
+	const struct stream_tag *t = stream_tag_get_current();
+	if (t) {
+		for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++) {
+			const char *value = t[i].value;
+			if (value && *value) {
+				shout_metadata_add(sd->shout_meta, t[i].icy_name, value);
+			} else {
+				shout_metadata_add(sd->shout_meta, t[i].icy_name, "");
+			}
+		}
+	} else {
+		t = stream_tag_get_names();
+		for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++) {
+			if (sd->stags[i] && *sd->stags[i]) {
+				shout_metadata_add(sd->shout_meta, t[i].icy_name, sd->stags[i]);
+			} else {
+				shout_metadata_add(sd->shout_meta, t[i].icy_name, "");
+			}
+		}
+	}
 }
 
 static void my_shout_set_tag(void *data,
@@ -537,6 +577,7 @@ static void my_shout_set_tag(void *data,
 		shout_tag_to_metadata(tag, song, sizeof(song));
 
 		shout_metadata_add(sd->shout_meta, "song", song);
+		shout_passthru_radio(sd);
 		if (SHOUTERR_SUCCESS != shout_set_metadata(sd->shout_conn,
 							   sd->shout_meta)) {
 			g_warning("error setting shout metadata\n");

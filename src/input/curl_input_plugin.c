@@ -483,6 +483,7 @@ static void
 input_curl_close(struct input_stream *is)
 {
 	struct input_curl *c = (struct input_curl *)is;
+	stream_tag_reset();
 
 	input_curl_free(c);
 }
@@ -617,6 +618,25 @@ input_curl_headerfunction(void *ptr, size_t size, size_t nmemb, void *stream)
 			c->base.seekable = false;
 		}
 	}
+
+	/* Store icecast stream metadata from input stream */
+	static const struct {
+		const char		*ice_hdr;
+		enum tag_type	id;
+	} hdr_mapping[] = {
+		{"ice-name",		TAG_STREAM_NAME},
+		{"icy-name",		TAG_STREAM_NAME},
+		{"ice-description",	TAG_STREAM_DESCRIPTION},
+		{"icy-description",	TAG_STREAM_DESCRIPTION},
+		{"ice-url",			TAG_STREAM_URL},
+		{"icy-url",			TAG_STREAM_URL},
+		{"ice-genre",		TAG_STREAM_GENRE},
+		{"icy-genre",		TAG_STREAM_GENRE}
+	};
+	unsigned i;
+	for (i = 0; i < sizeof(hdr_mapping) / sizeof(*hdr_mapping); i++)
+		if (g_ascii_strcasecmp(name, hdr_mapping[i].ice_hdr) == 0)
+			stream_tag_submit(hdr_mapping[i].id, g_strndup(value, end - value));
 
 	return size;
 }
@@ -864,6 +884,7 @@ input_curl_open(const char *url, GError **error_r)
 
 	icy_clear(&c->icy_metadata);
 	c->tag = NULL;
+	stream_tag_reset();
 
 	ret = input_curl_easy_init(c, error_r);
 	if (!ret) {

@@ -52,6 +52,7 @@ enum tag_type {
 	TAG_MUSICBRAINZ_TRACKID,
 
 	TAG_NUM_OF_ITEM_TYPES
+
 };
 
 /**
@@ -229,5 +230,29 @@ bool tag_has_type(const struct tag *tag, enum tag_type type);
  * order of the tag items matters.
  */
 bool tag_equal(const struct tag *tag1, const struct tag *tag2);
+
+enum stream_tag_type {
+	/* Special tags for passing stream meta information
+	 * between shound in/out streams */
+	TAG_STREAM_NAME,
+	TAG_STREAM_DESCRIPTION,
+	TAG_STREAM_URL,
+	TAG_STREAM_GENRE,
+
+	TAG_STREAM_NUM_OF_ITEM_TYPES
+};
+
+typedef const char *stream_tag_v[TAG_STREAM_NUM_OF_ITEM_TYPES];
+
+struct stream_tag {
+	const char	*icy_name;
+	char		*value;
+};
+
+
+void stream_tag_reset(void);
+void stream_tag_submit(enum stream_tag_type t, char *value);
+struct stream_tag *stream_tag_get_current(void);
+const struct stream_tag *stream_tag_get_names(void);
 
 #endif
