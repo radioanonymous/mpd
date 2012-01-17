@@ -887,7 +887,7 @@ input_curl_open(const char *url, GError **error_r)
 
 	icy_clear(&c->icy_metadata);
 	c->tag = NULL;
-	c->stream_md = stream_meta_set(NULL, STREAM_META_URL, g_strdup(url));
+	c->stream_md = stream_meta_set(NULL, STREAM_META_SOURCE, g_strdup(url));
 
 	ret = input_curl_easy_init(c, error_r);
 	if (!ret) {

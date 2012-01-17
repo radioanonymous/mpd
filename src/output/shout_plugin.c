@@ -29,6 +29,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #undef G_LOG_DOMAIN
 #define G_LOG_DOMAIN "shout"
@@ -52,6 +54,7 @@ struct shout_data {
 	int timeout;
 
 	char **stream_md;
+	char *log;
 
 	struct shout_buffer buf;
 };
@@ -101,6 +104,7 @@ static void free_shout_data(struct shout_data *sd)
 	if (sd->shout_conn)
 		shout_free(sd->shout_conn);
 
+	g_free(sd->log);
 	g_free(sd);
 }
 
@@ -312,6 +316,13 @@ my_shout_init_driver(const struct audio_format *audio_format,
 					     temp);
 		}
 	}
+
+	/* log file */
+	value = config_get_block_string(param, "log", NULL);
+	if (value)
+		sd->log = g_strdup(value);
+	else
+		sd->log = NULL;
 
 	return sd;
 
@@ -548,12 +559,84 @@ static void shout_passthru_radio(struct shout_data *sd, const struct tag *tag)
 	}
 }
 
+static const char *sm_mapping[STREAM_META_NUM_OF_ITEM_TYPES] = {
+	"src",		//STREAM_META_SOURCE
+	"dj",		//STREAM_META_NAME
+	"desc",		//STREAM_META_DESCRIPTION
+	NULL,		//STREAM_META_URL
+	NULL		//STREAM_META_GENRE
+};
+
+#define MAX_CHUNK_SZ	8192
+
+static unsigned append_meta(unsigned char *base, unsigned l, const char *id, const char *value)
+{
+	unsigned sz = l < MAX_CHUNK_SZ - 2
+		?  MAX_CHUNK_SZ - 2 - l > 0x1fe ? 0xff : (MAX_CHUNK_SZ - 1 - l) >> 1
+		: 0;
+	if (sz) {
+		unsigned len = snprintf((char*)base + l + 1, sz, "%s=%s", id, value);
+		base[l] = len > 0x1fe ? 0xff : (len + 1) >> 1;
+		return l + (((len + 1) >> 1) << 1) + 1;
+	}
+	return l;
+}
+
+static unsigned char sign[4] = {0xfe, 0xff, 0xfc, 0x7f};
+
+static void log_metadata(struct shout_data *sd, const struct tag *tag)
+{
+	if (sd->log) {
+		unsigned char chunk[MAX_CHUNK_SZ];
+		unsigned l = sizeof(sign), i;
+		char fname[1024];
+		struct tm t;
+		union {
+			unsigned char raw[8];
+			time_t now;
+		} tstamp;
+		memset(&tstamp, 0, sizeof(tstamp));
+		time(&tstamp.now);
+		memcpy(chunk, sign, sizeof(sign));
+		memcpy(chunk + l, tstamp.raw, 8);
+		l += 8;
+		if (tag->stream_md) {
+			for (i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++)
+				if (sm_mapping[i] && tag->stream_md[i])
+					l = append_meta(chunk, l, sm_mapping[i], tag->stream_md[i]);
+		}
+		static struct {
+			enum tag_type	t;
+			const char		*id;
+		} tag_map[] = {
+			{TAG_TITLE,		"title"},
+			{TAG_ARTIST,	"artist"}
+		};
+		for (i = 0; i < sizeof(tag_map) / sizeof(*tag_map); i++) {
+			const char *value = tag_get_value(tag, tag_map[i].t);
+			if (value)
+				l = append_meta(chunk, l, tag_map[i].id, value);
+		}
+		chunk[l++] = 0;
+
+		localtime_r(&tstamp.now, &t);
+		strftime(fname, sizeof(fname), sd->log, &t);
+
+		int fd = open(fname, O_CREAT | O_APPEND | O_WRONLY, 0644);
+		if (fd != -1) {
+			write(fd, chunk, l);
+			close(fd);
+		}
+	}
+}
+
 static void my_shout_set_tag(void *data,
 			     const struct tag *tag)
 {
 	struct shout_data *sd = (struct shout_data *)data;
 	bool ret;
 	GError *error = NULL;
+	log_metadata(sd, tag);
 
 	if (sd->encoder->plugin->tag != NULL) {
 		/* encoder plugin supports stream tags */
