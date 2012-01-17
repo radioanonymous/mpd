@@ -51,7 +51,7 @@ struct shout_data {
 
 	int timeout;
 
-	char *stags[TAG_STREAM_NUM_OF_ITEM_TYPES];
+	char **stream_md;
 
 	struct shout_buffer buf;
 };
@@ -87,16 +87,14 @@ static struct shout_data *new_shout_data(void)
 	ret->bitrate = -1;
 	ret->quality = -2.0;
 	ret->timeout = DEFAULT_CONN_TIMEOUT;
-	memset(ret->stags, 0, sizeof(ret->stags));
+	ret->stream_md = NULL;
 
 	return ret;
 }
 
 static void free_shout_data(struct shout_data *sd)
 {
-	unsigned i;
-	for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++)
-		g_free(sd->stags[i]);
+	stream_meta_free(sd->stream_md);
 
 	if (sd->shout_meta)
 		shout_metadata_free(sd->shout_meta);
@@ -167,7 +165,7 @@ my_shout_init_driver(const struct audio_format *audio_format,
 
 	check_block_param("name");
 	name = block_param->value;
-	sd->stags[TAG_STREAM_NAME] = g_strdup(name);
+	sd->stream_md = stream_meta_set(sd->stream_md, STREAM_META_NAME, g_strdup(name));
 
 	public = config_get_block_bool(param, "public", false);
 
@@ -278,7 +276,7 @@ my_shout_init_driver(const struct audio_format *audio_format,
 		goto failure;
 	}
 	if (value)
-		sd->stags[TAG_STREAM_GENRE] = g_strdup(value);
+		sd->stream_md = stream_meta_set(sd->stream_md, STREAM_META_GENRE, g_strdup(value));
 
 	value = config_get_block_string(param, "description", NULL);
 	if (value != NULL && shout_set_description(sd->shout_conn, value)) {
@@ -287,11 +285,11 @@ my_shout_init_driver(const struct audio_format *audio_format,
 		goto failure;
 	}
 	if (value)
-		sd->stags[TAG_STREAM_DESCRIPTION] = g_strdup(value);
+		sd->stream_md = stream_meta_set(sd->stream_md, STREAM_META_DESCRIPTION, g_strdup(value));
 	/* url */
 	value = config_get_block_string(param, "url", NULL);
 	if (value)
-		sd->stags[TAG_STREAM_URL] = g_strdup(value);
+		sd->stream_md = stream_meta_set(sd->stream_md, STREAM_META_URL, g_strdup(value));
 
 	{
 		char temp[11];
@@ -519,30 +517,32 @@ shout_tag_to_metadata(const struct tag *tag, char *dest, size_t size)
 	snprintf(dest, size, "%s%s%s", artist, infix, title);
 }
 
-static void shout_passthru_radio(struct shout_data *sd)
+static void shout_passthru_radio(struct shout_data *sd, const struct tag *tag)
 {
 	unsigned i;
-	const struct stream_tag *t = stream_tag_get_current();
-	if (t) {
-		for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++) {
-			const char *value = t[i].value;
+	if (tag->stream_md) {
+		for (i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++) {
+			const char *value = tag->stream_md[i];
+			if (!stream_metadata_names[i])
+				continue;
 			if (value && *value) {
-				shout_metadata_add(sd->shout_meta, t[i].icy_name, value);
+				shout_metadata_add(sd->shout_meta, stream_metadata_names[i], value);
 			} else {
-				if (i == TAG_STREAM_DESCRIPTION && sd->stags[i])
-					value = sd->stags[i];
+				if (i == STREAM_META_DESCRIPTION && sd->stream_md && sd->stream_md[i])
+					value = sd->stream_md[i];
 				else
 					value = "";
-				shout_metadata_add(sd->shout_meta, t[i].icy_name, value);
+				shout_metadata_add(sd->shout_meta, stream_metadata_names[i], value);
 			}
 		}
 	} else {
-		t = stream_tag_get_names();
-		for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++) {
-			if (sd->stags[i] && *sd->stags[i]) {
-				shout_metadata_add(sd->shout_meta, t[i].icy_name, sd->stags[i]);
+		for (i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++) {
+			if (!stream_metadata_names[i])
+				continue;
+			if (sd->stream_md && sd->stream_md[i] && *sd->stream_md[i]) {
+				shout_metadata_add(sd->shout_meta, stream_metadata_names[i], sd->stream_md[i]);
 			} else {
-				shout_metadata_add(sd->shout_meta, t[i].icy_name, "");
+				shout_metadata_add(sd->shout_meta, stream_metadata_names[i], "");
 			}
 		}
 	}
@@ -581,7 +581,7 @@ static void my_shout_set_tag(void *data,
 		shout_tag_to_metadata(tag, song, sizeof(song));
 
 		shout_metadata_add(sd->shout_meta, "song", song);
-		shout_passthru_radio(sd);
+		shout_passthru_radio(sd, tag);
 		if (SHOUTERR_SUCCESS != shout_set_metadata(sd->shout_conn,
 							   sd->shout_meta)) {
 			g_warning("error setting shout metadata\n");

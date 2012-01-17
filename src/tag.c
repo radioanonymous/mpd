@@ -159,6 +159,7 @@ struct tag *tag_new(void)
 	ret->items = NULL;
 	ret->time = -1;
 	ret->num_items = 0;
+	ret->stream_md = NULL;
 	return ret;
 }
 
@@ -214,6 +215,13 @@ void tag_free(struct tag *tag)
 	} else
 		g_free(tag->items);
 
+	if (tag->stream_md) {
+		for (i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++)
+			if (tag->stream_md[i])
+				g_free(tag->stream_md[i]);
+		g_free(tag->stream_md);
+	}
+
 	g_free(tag);
 }
 
@@ -233,6 +241,14 @@ struct tag *tag_dup(const struct tag *tag)
 	for (unsigned i = 0; i < tag->num_items; i++)
 		ret->items[i] = tag_pool_dup_item(tag->items[i]);
 	g_mutex_unlock(tag_pool_lock);
+
+	if (tag->stream_md) {
+		ret->stream_md = g_new(char*, STREAM_META_NUM_OF_ITEM_TYPES);
+		for (unsigned i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++)
+			ret->stream_md[i] = tag->stream_md[i] ? g_strdup(tag->stream_md[i]) : NULL;
+	} else {
+		ret->stream_md = NULL;
+	}
 
 	return ret;
 }
@@ -278,6 +294,14 @@ tag_merge(const struct tag *base, const struct tag *add)
 
 		ret->num_items = n;
 		ret->items = g_realloc(ret->items, items_size(ret));
+	}
+
+	if (base->stream_md || add->stream_md) {
+		ret->stream_md = g_new(char*, STREAM_META_NUM_OF_ITEM_TYPES);
+		for (unsigned i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++) {
+			char *value = add->stream_md[i] != NULL ? add->stream_md[i] : base->stream_md[i];
+			ret->stream_md[i] = value ? g_strdup(value) : NULL;
+		}
 	}
 
 	return ret;
@@ -520,39 +544,47 @@ void tag_add_item_n(struct tag *tag, enum tag_type type,
 	tag_add_item_internal(tag, type, value, len);
 }
 
-static struct stream_tag *stream_tags = NULL;
-static struct stream_tag stags[TAG_STREAM_NUM_OF_ITEM_TYPES] = {
-	{"xstreamname",		NULL},
-	{"xstreamdesc",		NULL},
-	{"xstreamurl",		NULL},
-	{"xstreamgenre",	NULL}
+const char *stream_metadata_names[] = {
+	NULL,
+	"xstreamname",
+	"xstreamdesc",
+	"xstreamurl",
+	"xstreamgenre"
 };
 
-void stream_tag_reset()
+char **stream_meta_set(char **meta, enum stream_metadata_t t, char *value)
 {
-	unsigned i;
-	for (i = 0; i < TAG_STREAM_NUM_OF_ITEM_TYPES; i++) {
-		g_free(stags[i].value);
-		stags[i].value = NULL;
+	if (!meta)
+		meta = g_new0(char*, STREAM_META_NUM_OF_ITEM_TYPES);
+
+	if (meta[t])
+		g_free(meta[t]);
+
+	meta[t] = value;
+	return meta;
+}
+
+void stream_meta_free(char **meta)
+{
+	if (meta) {
+		for (unsigned i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++)
+			if (meta[i])
+				g_free(meta[i]);
+		g_free(meta);
 	}
-	stream_tags = NULL;
 }
 
-void stream_tag_submit(enum stream_tag_type t, char *value)
+void stream_meta_copy(struct tag *dst, char **src)
 {
-	if (stags[t].value)
-		g_free(stags[t].value);
-	stags[t].value = value;
-	stream_tags = stags;
-}
-
-struct stream_tag* stream_tag_get_current()
-{
-	return stream_tags;
-}
-
-const struct stream_tag *stream_tag_get_names()
-{
-	return stags;
+	if (dst && src) {
+		if (!dst->stream_md) {
+			dst->stream_md = g_new(char*, STREAM_META_NUM_OF_ITEM_TYPES);
+			for (unsigned i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++)
+				dst->stream_md[i] = src[i] ? g_strdup(src[i]) : NULL;
+		} else {
+			for (unsigned i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++)
+				dst->stream_md = stream_meta_set(dst->stream_md, i, src[i]);
+		}
+	}
 }
 

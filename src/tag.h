@@ -55,6 +55,20 @@ enum tag_type {
 
 };
 
+enum stream_metadata_t {
+	/* Special tags for passing stream meta information
+	 * between shound in/out streams */
+	STREAM_META_SOURCE,
+	STREAM_META_NAME,
+	STREAM_META_DESCRIPTION,
+	STREAM_META_URL,
+	STREAM_META_GENRE,
+
+	STREAM_META_NUM_OF_ITEM_TYPES
+};
+
+extern const char *stream_metadata_names[];
+
 /**
  * An array of strings, which map the #tag_type to its machine
  * readable name (specific to the MPD protocol).
@@ -94,6 +108,8 @@ struct tag {
 
 	/** the total number of tag items in the #items array */
 	unsigned num_items;
+
+	char			**stream_md;
 };
 
 /**
@@ -231,28 +247,8 @@ bool tag_has_type(const struct tag *tag, enum tag_type type);
  */
 bool tag_equal(const struct tag *tag1, const struct tag *tag2);
 
-enum stream_tag_type {
-	/* Special tags for passing stream meta information
-	 * between shound in/out streams */
-	TAG_STREAM_NAME,
-	TAG_STREAM_DESCRIPTION,
-	TAG_STREAM_URL,
-	TAG_STREAM_GENRE,
-
-	TAG_STREAM_NUM_OF_ITEM_TYPES
-};
-
-typedef const char *stream_tag_v[TAG_STREAM_NUM_OF_ITEM_TYPES];
-
-struct stream_tag {
-	const char	*icy_name;
-	char		*value;
-};
-
-
-void stream_tag_reset(void);
-void stream_tag_submit(enum stream_tag_type t, char *value);
-struct stream_tag *stream_tag_get_current(void);
-const struct stream_tag *stream_tag_get_names(void);
+char **stream_meta_set(char **meta, enum stream_metadata_t t, char *value);
+void stream_meta_free(char **meta);
+void stream_meta_copy(struct tag *dst, char **src);
 
 #endif

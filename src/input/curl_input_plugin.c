@@ -97,6 +97,8 @@ struct input_curl {
 	/** the tag object ready to be requested via
 	    input_stream_tag() */
 	struct tag *tag;
+
+	char **stream_md;
 };
 
 /** libcurl should accept "ICY 200 OK" */
@@ -212,6 +214,7 @@ input_curl_free(struct input_curl *c)
 	if (c->tag != NULL)
 		tag_free(c->tag);
 	g_free(c->meta_name);
+	stream_meta_free(c->stream_md);
 
 	input_curl_easy_free(c);
 
@@ -230,8 +233,10 @@ input_curl_tag(struct input_stream *is)
 {
 	struct input_curl *c = (struct input_curl *)is;
 	struct tag *tag = c->tag;
+	stream_meta_copy(tag, c->stream_md);
 
 	c->tag = NULL;
+
 	return tag;
 }
 
@@ -483,7 +488,6 @@ static void
 input_curl_close(struct input_stream *is)
 {
 	struct input_curl *c = (struct input_curl *)is;
-	stream_tag_reset();
 
 	input_curl_free(c);
 }
@@ -591,10 +595,9 @@ input_curl_headerfunction(void *ptr, size_t size, size_t nmemb, void *stream)
 		g_free(c->meta_name);
 		c->meta_name = g_strndup(value, end - value);
 
-		if (c->tag != NULL)
-			tag_free(c->tag);
+		if (!c->tag)
+			c->tag = tag_new();
 
-		c->tag = tag_new();
 		tag_add_item(c->tag, TAG_NAME, c->meta_name);
 	} else if (g_ascii_strcasecmp(name, "icy-metaint") == 0) {
 		char buffer[64];
@@ -621,22 +624,22 @@ input_curl_headerfunction(void *ptr, size_t size, size_t nmemb, void *stream)
 
 	/* Store icecast stream metadata from input stream */
 	static const struct {
-		const char		*ice_hdr;
-		enum tag_type	id;
+		const char				*ice_hdr;
+		enum stream_metadata_t	id;
 	} hdr_mapping[] = {
-		{"ice-name",		TAG_STREAM_NAME},
-		{"icy-name",		TAG_STREAM_NAME},
-		{"ice-description",	TAG_STREAM_DESCRIPTION},
-		{"icy-description",	TAG_STREAM_DESCRIPTION},
-		{"ice-url",			TAG_STREAM_URL},
-		{"icy-url",			TAG_STREAM_URL},
-		{"ice-genre",		TAG_STREAM_GENRE},
-		{"icy-genre",		TAG_STREAM_GENRE}
+		{"ice-name",		STREAM_META_NAME},
+		{"icy-name",		STREAM_META_NAME},
+		{"ice-description",	STREAM_META_DESCRIPTION},
+		{"icy-description",	STREAM_META_DESCRIPTION},
+		{"ice-url",			STREAM_META_URL},
+		{"icy-url",			STREAM_META_URL},
+		{"ice-genre",		STREAM_META_GENRE},
+		{"icy-genre",		STREAM_META_GENRE}
 	};
 	unsigned i;
 	for (i = 0; i < sizeof(hdr_mapping) / sizeof(*hdr_mapping); i++)
 		if (g_ascii_strcasecmp(name, hdr_mapping[i].ice_hdr) == 0)
-			stream_tag_submit(hdr_mapping[i].id, g_strndup(value, end - value));
+			c->stream_md = stream_meta_set(c->stream_md, hdr_mapping[i].id, g_strndup(value, end - value));
 
 	return size;
 }
@@ -884,7 +887,7 @@ input_curl_open(const char *url, GError **error_r)
 
 	icy_clear(&c->icy_metadata);
 	c->tag = NULL;
-	stream_tag_reset();
+	c->stream_md = stream_meta_set(NULL, STREAM_META_URL, g_strdup(url));
 
 	ret = input_curl_easy_init(c, error_r);
 	if (!ret) {
