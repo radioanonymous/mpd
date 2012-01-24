@@ -299,7 +299,9 @@ tag_merge(const struct tag *base, const struct tag *add)
 	if (base->stream_md || add->stream_md) {
 		ret->stream_md = g_new(char*, STREAM_META_NUM_OF_ITEM_TYPES);
 		for (unsigned i = 0; i < STREAM_META_NUM_OF_ITEM_TYPES; i++) {
-			char *value = add->stream_md[i] != NULL ? add->stream_md[i] : base->stream_md[i];
+			char *value = add->stream_md && add->stream_md[i]
+				? add->stream_md[i] : base->stream_md
+				? base->stream_md[i] : NULL;
 			ret->stream_md[i] = value ? g_strdup(value) : NULL;
 		}
 	}
